@@ -11,7 +11,26 @@ function safeGarment(x){let o={};for(let k of allowed)if(x[k]!==undefined)o[k]=x
 async function uploadImages(sb,uid){let count=0;for(let x of state.items){if(!x.image_path?.startsWith('images/'))continue;let path=`${uid}/${x.item_code.toLowerCase()}.webp`;let blob=await fetch(x.image_path).then(r=>{if(!r.ok)throw Error('Cannot read '+x.image_path);return r.blob()});let {error}=await sb.storage.from('garment-images').upload(path,blob,{upsert:true,contentType:blob.type||'image/webp'});if(error)throw Error('Image upload for '+x.item_code+': '+error.message);x.image_path=path;x.image_source='supabase-storage';count++}return count}
 async function uploadAll(){if(!confirm('Upload the local wardrobe and pair decisions to this Supabase account? Existing matching item codes and pairs will be updated.'))return;let sb=getClient(),user=(await sb.auth.getUser()).data.user;if(!user)throw Error('Sign in first.');cloud.user=user;message('Uploading images and garments…');let n=await uploadImages(sb,user.id);let rows=state.items.map(x=>({...safeGarment(x),owner_id:user.id}));let {error}=await sb.from('garments').upsert(rows,{onConflict:'owner_id,item_code'});if(error)throw error;let {data:items,error:readerr}=await sb.from('garments').select('id,item_code').eq('owner_id',user.id);if(readerr)throw readerr;let ids=Object.fromEntries(items.map(x=>[x.item_code,x.id]));let pairs=Object.entries(state.pairs).map(([key,v])=>{let [a,b]=key.split('::').map(k=>ids[k]);if(!a||!b)return null;let [garment_a_id,garment_b_id]=[a,b].sort();return {owner_id:user.id,garment_a_id,garment_b_id,decision:v}}).filter(Boolean);if(pairs.length){let {error}=await sb.from('compatibility').upsert(pairs,{onConflict:'owner_id,garment_a_id,garment_b_id'});if(error)throw error}cloud.connected=true;message(`Saved ${rows.length} garments, ${pairs.length} pair decisions, and ${n} images in Supabase.`);}
 async function loadAll(){let sb=getClient(),user=(await sb.auth.getUser()).data.user;if(!user)throw Error('Sign in first.');cloud.user=user;let {data:items,error}=await sb.from('garments').select('*').eq('owner_id',user.id).order('item_code');if(error)throw error;let {data:relationships,error:err}=await sb.from('compatibility').select('garment_a_id,garment_b_id,decision').eq('owner_id',user.id);if(err)throw err;if(!items.length){message('No cloud garments yet. Use “Upload this wardrobe” to import the 10 starter items.');return}let byId=Object.fromEntries(items.map(x=>[x.id,x.item_code]));let pairs={};for(let p of relationships){let a=byId[p.garment_a_id],b=byId[p.garment_b_id];if(a&&b)pairs[pairKey(a,b)]=p.decision}
-for(let x of items){if(x.image_source==='supabase-storage'&&x.image_path){let {data,error}=await sb.storage.from('garment-images').createSignedUrl(x.image_path,3600);if(!error&&data?.signedUrl){x._storage_path=x.image_path;x.image_path=data.signedUrl;}}}
+for (let x of items) {
+  if (!x.image_path) continue;
+
+  const path = x.image_path;
+
+  if (path.startsWith('http') || path.startsWith('data:')) {
+    continue;
+  }
+
+  if (path.startsWith('images/')) {
+    continue;
+  }
+
+  const { data } = sb.storage
+    .from('garment-images')
+    .getPublicUrl(path);
+
+  x._storage_path = path;
+  x.image_path = data.publicUrl;
+}
 state.items=items;state.pairs=pairs;state.category='All';state.subcategory='All';cloud.connected=true;localStorage.setItem(KEY,JSON.stringify({items:state.items,pairs:state.pairs}));nav('wardrobe');alert(`Loaded ${items.length} garments and ${Object.keys(pairs).length} decisions from Supabase.`)}
 // In cloud mode, each state modification is queued for saving by uploadAll is NOT automatic.
 // Explicit push/pull prevents accidental loss. Keep browser backup until synchronized.
