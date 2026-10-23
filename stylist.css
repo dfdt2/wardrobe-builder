@@ -1,0 +1,22 @@
+
+/* Scoped stylist styles, preserving existing Builder screens. */
+.stylist { padding: 22px 22px 40px; }
+.stylist .layout {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:20px;align-items:start}
+.stylist .panel-s {border:1px solid #e7e7e7;border-radius:15px;padding:18px;margin-bottom:15px;background:#fff}
+.stylist .panel-s h2{font-size:17px;font-weight:600;letter-spacing:-.3px;margin:0 0 12px}
+.stylist .small{font-size:12px;color:#888;line-height:1.5}
+.stylist .line-s {display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.stylist button {font:inherit;cursor:pointer}.stylist button.tiny {border:1px solid #e0e0e0;background:#fff;border-radius:9px;padding:8px 10px}
+.stylist select,.stylist input{border:1px solid #ddd;border-radius:9px;padding:9px;background:white;min-width:0;max-width:100%;font-size:13px}
+.stylist .location-input{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}
+.stylist .location-input input{flex:1;min-width:130px}
+.stylist .forecast-s{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;margin-top:12px}
+.stylist .forecast-s>div{border-radius:9px;background:#f7f7f7;padding:11px 6px;text-align:center;display:flex;flex-direction:column;gap:4px}
+.stylist .forecast-s b{font-size:18px}.stylist .forecast-s small{font-size:10px;color:#888}
+.stylist .activity-s{display:grid;grid-template-columns:1fr 92px 92px 26px;gap:7px;align-items:center;margin-bottom:9px}
+.stylist .vibes-s{display:flex;gap:7px;flex-wrap:wrap}.stylist .vibes-s button{border-radius:22px;padding:8px 11px;border:1px solid #dedede;background:#fff;color:#777}.stylist .vibes-s button.active{background:#222;color:#fff;border-color:#222}
+.stylist .family-chips{display:flex;gap:7px;overflow-x:auto;padding:4px 0 12px}.stylist .family-chips button{white-space:nowrap;border:1px solid #ddd;border-radius:20px;background:white;padding:8px 12px}.stylist .family-chips button.active{background:#242424;border-color:#242424;color:#fff}
+.stylist .outfit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.stylist .garment-s{border:1px solid #f0f0f0;border-radius:11px;padding:8px;text-align:center;min-width:0}.stylist .garment-s img{width:100%;height:145px;object-fit:contain}.stylist .garment-s .name{font-size:11px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stylist .navigator-s{display:flex;justify-content:space-between;align-items:center;margin-top:11px;color:#888;font-size:12px}
+.stylist .empty-s{color:#777;padding:25px 5px;text-align:center;line-height:1.7}
+@media(max-width:720px){.stylist{padding:14px 12px 26px}.stylist .layout{grid-template-columns:1fr;gap:0}.stylist .panel-s{padding:13px}.stylist .activity-s{grid-template-columns:minmax(0,1fr) 73px 73px 22px}.stylist .activity-s select{padding:7px 3px;font-size:11px}.stylist .garment-s img{height:125px}}

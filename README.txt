@@ -1,21 +1,9 @@
-WARDROBE BUILDER — Starter Supabase / GitHub Pages app
+INTEGRATED WARDROBE BUILDER + STYLIST
 
-This contains 10 starter garments, an Acloset-style catalog, item details, three eligible compatibility pair types (Tops–Bottoms, Bottoms–Shoes, Bottoms–Outerwear), and network view. The schema stores garment attributes and weather properties together.
+Replace index.html in the root of your existing GitHub Pages repository. Add stylist.js and stylist.css alongside it. KEEP your existing seed.js and cloud.js unchanged.
 
-SETUP
-1. Create a Supabase project at https://supabase.com/dashboard.
-2. In Supabase SQL Editor run wardrobe_supabase_schema.sql.
-3. In Storage create a PRIVATE bucket named garment-images.
-4. In SQL Editor run wardrobe_storage_policies.sql.
-5. In Supabase Authentication settings enable email/password sign-in.
-6. Upload all contents of this folder (index.html, cloud.js, seed.js, images/ etc.) to the ROOT of a GitHub repository.
-7. In GitHub repository Settings > Pages, Deploy from branch: main, folder / (root). Open published URL.
-8. In the app choose ... > Settings; enter your Supabase Project URL and PUBLISHABLE key from dashboard (never service_role/secret). Save.
-9. Create your account and sign in. Confirm email if required.
-10. Export a JSON backup, then press Upload this wardrobe. Verify via Load cloud data.
+Sign in and use Load cloud data from the settings screen, then choose Stylist in the bottom menu. The stylist uses state.items and saved state.pairs; it does not use the standalone demo data.
 
-CAVEATS
-- This is a STARTER build, not production ready. Sync is MANUAL: local edits remain local until Upload; Load replaces local state. Avoid editing from multiple devices.
-- Screenshots can have truncated attributes; review imported garment metadata.
-- A data-loss-safe cloud sync, user-upload image handling, and role-specific outfit semantics require additional work.
-- Never publish private keys or personal data directly into repository source. Public GitHub Pages source files are visible.
+CAUTION: Pair approvals still save locally in the current cloud.js, until you manually upload. Make a backup before syncing. This integration does not change cloud syncing.
+
+The garment-images bucket remains public in your current Supabase configuration; garment images should not be considered private.
