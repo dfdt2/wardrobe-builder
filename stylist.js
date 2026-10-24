@@ -58,15 +58,16 @@ for(const base of bases)for(const shoe of by.shoe){
  // Every scheduled activity must be represented by at least one garment occasion.
  if(ST.activities.some(a=>!base.some(g=>hasOccasion(g,a.type))))continue;
  const baseTemp=required.reduce((t,g)=>t+warmth(g),0);
- // Warmest hour must be comfortable in the base outfit, without a coat.
- // Temperature is a ranking preference, not a hard exclusion; the score reflects comfort.
+ // The complete base outfit must be comfortable at the warmest scheduled hour.
+ // A removable outer layer can then be included for the coldest hour.
+ if(hottest!==null&&Math.abs(hottest+baseTemp-72)>9)continue;
  const layers=[null,...by.outer.filter(o=>compatibleSet([...required,o]))];
  let variants=[];
  for(const layer of layers){
    const garments=layer?[...required,layer]:required;
    const total=baseTemp+(layer?warmth(layer):0);
-   // Coldest hour should be comfortable with optional removable outerwear.
-   // Rank colder-weather layers rather than discard every outfit outside a narrow range.
+   // Reject a full outfit variant if its combined insulation misses the coldest hour.
+   if(coldest!==null&&Math.abs(coldest+total-72)>9)continue;
    const warmError=hottest===null?0:Math.abs(hottest+baseTemp-72);
    const coldError=coldest===null?0:Math.abs(coldest+total-72);
    const score=Math.max(0,100-Math.round((warmError+coldError)*2));
@@ -92,7 +93,7 @@ for(const candidate of candidates){
 }
 return clusters.slice(0,30);
 }
-function results(){if(!byid('st-outfit'))return;const groups=build();byid('st-count').textContent=`${groups.length} clusters`;ST.cluster=Math.min(ST.cluster,Math.max(0,groups.length-1));let g=groups[ST.cluster];if(!g){byid('st-families').innerHTML='';byid('st-outfit').innerHTML=`<div class="empty-s">No complete outfits match the schedule. Each outfit needs a top, pants or skirt, and shoes—or a dress and shoes.<br><span class="small">Try additional compatibility approvals, more clothing, or a different date or schedule.</span></div>`;return}
+function results(){if(!byid('st-outfit'))return;const groups=build();byid('st-count').textContent=`${groups.length} clusters`;ST.cluster=Math.min(ST.cluster,Math.max(0,groups.length-1));let g=groups[ST.cluster];if(!g){byid('st-families').innerHTML='';byid('st-outfit').innerHTML=`<div class="empty-s">No outfits satisfy your schedule, approved pairings, and total outfit warmth. Each base outfit needs a top, pants or skirt, and shoes—or a dress and shoes.<br><span class="small">Try additional compatibility approvals, more clothing, or a different date or schedule.</span></div>`;return}
 byid('st-families').innerHTML=groups.map((x,i)=>`<button class="${i===ST.cluster?'active':''}" data-st="family" data-index="${i}">Cluster ${i+1}</button>`).join('');ST.variant=Math.min(ST.variant,g.variants.length-1);const v=g.variants[ST.variant];byid('st-outfit').innerHTML=`<div class="outfit-grid">${v.garments.map(x=>`<div class="garment-s"><img src="${E(getimage(x))}" alt="${E(x.name)}"><div class="name">${E(x.name)}</div></div>`).join('')}</div><div class="navigator-s"><button class="tiny" data-st="previous">‹</button><span>Variation ${ST.variant+1} of ${g.variants.length} · Estimated fit ${v.score}</span><button class="tiny" data-st="next">›</button></div>`;
 }
 async function getWeather(){if(ST.lat==null||ST.lon==null)return;const key=`${ST.lat},${ST.lon},${ST.date}`;if(ST.weatherKey===key&&ST.weather)return;ST.weather=null;ST.weatherMessage='Loading forecast…';forecast();try{const url=`https://api.open-meteo.com/v1/forecast?latitude=${ST.lat}&longitude=${ST.lon}&hourly=temperature_2m,precipitation_probability,snowfall,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=16`;const res=await fetch(url);if(!res.ok)throw Error('Forecast service unavailable');const d=await res.json();const hours=Array.from({length:24},(_,h)=>{const idx=d.hourly.time.indexOf(`${ST.date}T${String(h).padStart(2,'0')}:00`);return idx<0?null:{temp:d.hourly.temperature_2m[idx],rain:d.hourly.precipitation_probability[idx]??0,snow:d.hourly.snowfall[idx]??0,code:d.hourly.weather_code[idx]}});if(hours.every(x=>!x))throw Error('Forecast unavailable for this date (typically limited to the next 16 days)');ST.weather=hours;ST.weatherKey=key;ST.weatherMessage='';}catch(e){ST.weatherMessage=e.message;ST.weatherKey='';}forecast();results();}
