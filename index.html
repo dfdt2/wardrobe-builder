@@ -154,7 +154,7 @@ function renderTrainer(m){
 function renderNetwork(m){
  setTitle('Network');
  const categories=types(),subcategories=['All',...(state.networkFocus==='All'?[]:WARDROBE_CATEGORIES[state.networkFocus]||[])];
- const items=state.items.filter(x=>image(x)&&(state.networkFocus==='All'||x.category===state.networkFocus)&&(networkSubcategory==='All'||x.subcategory===networkSubcategory)&&passesFilters(x,networkFilters)),byCode=new Map(items.map((x,i)=>[x.item_code,i]));
+ const items=state.items.filter(x=>image(x)&&passesFilters(x,networkFilters)),byCode=new Map(items.map((x,i)=>[x.item_code,i]));
  const links=Object.entries(state.pairs).filter(([k,v])=>v===true).map(([k])=>k.split('::')).filter(([a,b])=>byCode.has(a)&&byCode.has(b)).map(([a,b])=>[byCode.get(a),byCode.get(b)]);
  const n=items.length,neighbors=Array.from({length:n},()=>new Set());
  for(const [i,j] of links){neighbors[i].add(j);neighbors[j].add(i)}
@@ -184,7 +184,7 @@ function renderNetwork(m){
  }
  const edgeMarkup=links.map(([i,j])=>'<line data-edge-a="'+i+'" data-edge-b="'+j+'" x1="'+pts[i].x.toFixed(1)+'" y1="'+pts[i].y.toFixed(1)+'" x2="'+pts[j].x.toFixed(1)+'" y2="'+pts[j].y.toFixed(1)+'"/>').join('');
  const nodeMarkup=items.map((x,i)=>'<g class="net-node" data-net-index="'+i+'" tabindex="0" role="button" aria-label="'+esc(x.name)+'" transform="translate('+pts[i].x.toFixed(1)+' '+pts[i].y.toFixed(1)+')"><circle r="28" fill="#fff" stroke="#d4d6d9" stroke-width="1.5"/><image href="'+esc(image(x))+'" x="-24" y="-24" width="48" height="48" preserveAspectRatio="xMidYMid meet"/></g>').join('');
- const controls='<div class="toprow wardrobe-controls"><button class="filter-trigger" id="togglefilters" aria-label="Filters" aria-expanded="'+!!state.filtersOpen+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.5" fill="white"/><circle cx="16" cy="17" r="2.5" fill="white"/></svg></button></div><div class="catbar">'+categories.map(c=>'<button data-net-cat="'+esc(c)+'" class="'+(c===state.networkFocus?'active':'')+'">'+esc(c)+'</button>').join('')+'</div><div class="subbar">'+subcategories.map(c=>'<button data-net-sub="'+esc(c)+'" class="'+(c===networkSubcategory?'active':'')+'">'+esc(c)+'</button>').join('')+'</div>';
+ const controls='<div class="toprow wardrobe-controls"><button class="filter-trigger" id="togglefilters" aria-label="Filters" aria-expanded="'+!!state.filtersOpen+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.5" fill="white"/><circle cx="16" cy="17" r="2.5" fill="white"/></svg></button></div>';
  m.innerHTML=controls+(state.filtersOpen?filterSheet():'')+'<div class="net-screen"><svg viewBox="0 0 1000 840" aria-label="Wardrobe compatibility network"><g class="net-links">'+edgeMarkup+'</g><g class="net-points">'+nodeMarkup+'</g></svg><button class="net-clear" type="button" hidden>Clear selection</button><button class="net-reset" type="button">Reset view</button></div>';
  const screen=m.querySelector('.net-screen'),svg=screen.querySelector('svg'),clear=screen.querySelector('.net-clear');
  const view={x:0,y:0,w:1000,h:840},pointers=new Map();let gesture=null,suppressClick=false;
