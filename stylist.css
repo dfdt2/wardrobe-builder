@@ -55,3 +55,8 @@
 .stylist .forecast-s .weather-snow{background:linear-gradient(150deg,#b7d8e9,#e7eef3);color:#355369}
 .stylist .weather-snow .weather-art-s:after{content:"✳  ·  ✳";position:absolute;right:1px;top:17px;font-size:21px;color:#fffc}
 @media(max-width:400px){.stylist .forecast-s{gap:5px}.stylist .forecast-s .weather-card-s{min-height:105px}.stylist .forecast-s .weather-card-s b{font-size:21px}.stylist .forecast-s .weather-card-s small{font-size:10px}}
+
+/* Outfit garments link directly to their compatibility details. */
+.stylist button.garment-s{display:block;width:100%;background:#fff;color:inherit;font:inherit;cursor:pointer}
+.stylist button.garment-s:focus-visible{outline:2px solid #333;outline-offset:2px}
+.stylist button.garment-s:hover{border-color:#b5b5b5}
