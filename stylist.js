@@ -34,6 +34,14 @@ const TRAINABLE=new Set(['bottom|top','bottom|shoe','bottom|outer']);
 function trainerEligible(a,b){const x=ROLE(a.category),y=ROLE(b.category);return !!(x&&y&&TRAINABLE.has([x,y].sort().join('|')))}
 function compatibleSet(items){return items.every((x,i)=>items.slice(i+1).every(y=>(trainerEligible(x,y)?pair(x,y):state.pairs[[x.item_code,y.item_code].sort().join('::')]!==false)))}
 function hasOccasion(g,type){return (g.occasions||[]).some(o=>String(o).trim().toLowerCase()===String(type).trim().toLowerCase())}
+// A complete base outfit is either top + pants/skirt + shoes, or dress + shoes.
+// Outerwear is an optional variation and never substitutes for a required item.
+function validBaseOutfit(items){
+ const count=role=>items.filter(g=>group(g.category)===role).length;
+ const dressLook=count('dress')===1&&count('shoe')===1&&count('top')===0&&count('bottom')===0;
+ const separatesLook=count('top')===1&&count('bottom')===1&&count('shoe')===1&&count('dress')===0;
+ return items.length===(dressLook?2:3)&&(dressLook||separatesLook);
+}
 function build(){
 const by={top:[],bottom:[],shoe:[],outer:[],dress:[]};
 for(const x of state.items){let role=group(x.category);if(role)by[role].push(x)}
@@ -46,7 +54,7 @@ for(const top of by.top)for(const bottom of by.bottom)if(pair(top,bottom))bases.
 for(const dress of by.dress)bases.push([dress]);
 for(const base of bases)for(const shoe of by.shoe){
  const required=[...base,shoe];
- if(!compatibleSet(required))continue;
+ if(!validBaseOutfit(required)||!compatibleSet(required))continue;
  // Every scheduled activity must be represented by at least one garment occasion.
  if(ST.activities.some(a=>!base.some(g=>hasOccasion(g,a.type))))continue;
  const baseTemp=required.reduce((t,g)=>t+warmth(g),0);
@@ -84,7 +92,7 @@ for(const candidate of candidates){
 }
 return clusters.slice(0,30);
 }
-function results(){if(!byid('st-outfit'))return;const groups=build();byid('st-count').textContent=`${groups.length} clusters`;ST.cluster=Math.min(ST.cluster,Math.max(0,groups.length-1));let g=groups[ST.cluster];if(!g){byid('st-families').innerHTML='';byid('st-outfit').innerHTML=`<div class="empty-s">No outfits have the required approved top–bottom and bottom–shoe pairings for this schedule.<br><span class="small">Try additional compatibility approvals, more clothing, or a different date or schedule.</span></div>`;return}
+function results(){if(!byid('st-outfit'))return;const groups=build();byid('st-count').textContent=`${groups.length} clusters`;ST.cluster=Math.min(ST.cluster,Math.max(0,groups.length-1));let g=groups[ST.cluster];if(!g){byid('st-families').innerHTML='';byid('st-outfit').innerHTML=`<div class="empty-s">No complete outfits match the schedule. Each outfit needs a top, pants or skirt, and shoes—or a dress and shoes.<br><span class="small">Try additional compatibility approvals, more clothing, or a different date or schedule.</span></div>`;return}
 byid('st-families').innerHTML=groups.map((x,i)=>`<button class="${i===ST.cluster?'active':''}" data-st="family" data-index="${i}">Cluster ${i+1}</button>`).join('');ST.variant=Math.min(ST.variant,g.variants.length-1);const v=g.variants[ST.variant];byid('st-outfit').innerHTML=`<div class="outfit-grid">${v.garments.map(x=>`<div class="garment-s"><img src="${E(getimage(x))}" alt="${E(x.name)}"><div class="name">${E(x.name)}</div></div>`).join('')}</div><div class="navigator-s"><button class="tiny" data-st="previous">‹</button><span>Variation ${ST.variant+1} of ${g.variants.length} · Estimated fit ${v.score}</span><button class="tiny" data-st="next">›</button></div>`;
 }
 async function getWeather(){if(ST.lat==null||ST.lon==null)return;const key=`${ST.lat},${ST.lon},${ST.date}`;if(ST.weatherKey===key&&ST.weather)return;ST.weather=null;ST.weatherMessage='Loading forecast…';forecast();try{const url=`https://api.open-meteo.com/v1/forecast?latitude=${ST.lat}&longitude=${ST.lon}&hourly=temperature_2m,precipitation_probability,snowfall,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=16`;const res=await fetch(url);if(!res.ok)throw Error('Forecast service unavailable');const d=await res.json();const hours=Array.from({length:24},(_,h)=>{const idx=d.hourly.time.indexOf(`${ST.date}T${String(h).padStart(2,'0')}:00`);return idx<0?null:{temp:d.hourly.temperature_2m[idx],rain:d.hourly.precipitation_probability[idx]??0,snow:d.hourly.snowfall[idx]??0,code:d.hourly.weather_code[idx]}});if(hours.every(x=>!x))throw Error('Forecast unavailable for this date (typically limited to the next 16 days)');ST.weather=hours;ST.weatherKey=key;ST.weatherMessage='';}catch(e){ST.weatherMessage=e.message;ST.weatherKey='';}forecast();results();}
