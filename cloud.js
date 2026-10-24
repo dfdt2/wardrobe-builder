@@ -85,5 +85,5 @@ if(cloud.user&&localStorage.getItem('wardrobe-sync-user')===cloud.user.id){
   if(localStorage.getItem('wardrobe-sync-pending')==='1'){
     cloud.ready=true;cloud.queued=true;cloud.baselinePairs={...state.pairs};void drain();
   }else await loadAll();
-}}catch(err){console.warn('Startup cloud sync:',err)}})();
+}}}catch(err){console.warn('Startup cloud sync:',err)}})();
 })();
