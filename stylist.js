@@ -25,20 +25,60 @@ function forecast(){const slot=byid('st-forecast');if(!slot)return;slot.innerHTM
 function schedule(){const slot=byid('st-activities');if(!slot)return;slot.innerHTML=ST.activities.map((a,i)=>`<div class="activity-s"><select aria-label="Activity ${i+1}" data-st-activity="${i}" data-key="type">${options(a.type,TYPES)}</select><select aria-label="Start time" data-st-activity="${i}" data-key="start">${Array.from({length:24},(_,h)=>`<option value="${h}" ${a.start===h?'selected':''}>${time(h)}</option>`).join('')}</select><select aria-label="End time" data-st-activity="${i}" data-key="end">${Array.from({length:24},(_,i)=>i+1).map(h=>`<option value="${h}" ${a.end===h?'selected':''}>${time(h)}</option>`).join('')}</select><button class="tiny" data-st="remove" data-index="${i}" title="Remove">×</button></div>`).join('');byid('st-vibes').innerHTML=VIBES.map(v=>`<button class="${v===ST.vibe?'active':''}" data-st="vibe" data-vibe="${v}">${v}</button>`).join('')}
 function group(name){const n=String(name||'').toLowerCase();if(n==='tops'||n==='top')return 'top';if(['pants','skirts','shorts','bottoms'].includes(n))return 'bottom';if(['shoes','footwear'].includes(n))return 'shoe';if(['outerwear','jackets','coats'].includes(n))return 'outer';if(n==='dresses')return 'dress';return null}
 function warmth(g){const clo=Number(g.insulation_clo_estimate);return Number.isFinite(clo)&&clo>0?clo*25:0} // °F contribution is a heuristic, not a physical conversion
-function build(){const items=state.items;const by={top:[],bottom:[],shoe:[],outer:[],dress:[]};for(const x of items){let r=group(x.category);if(r)by[r].push(x)}
-const bases=[];for(const t of by.top)for(const b of by.bottom)if(pair(t,b))bases.push([t,b]);for(const d of by.dress)bases.push([d]);
-const families=[];
-for(const base of bases){for(const s of by.shoe){if(!base.every(g=>g===base[0]&&group(g.category)==='top'?pair(base[1],s):pair(g,s)))continue;
- const required=[...base,s];const outer=[null,...by.outer.filter(o=>base.some(g=>group(g.category)==='bottom'&&pair(g,o)) || (base.length===1&&pair(base[0],o)))];
- const variants=outer.map(layer=>{const garments=layer?[...required,layer]:required;let score=100;const sampledHours=ST.activities.flatMap(a=>Array.from({length:Math.max(0,a.end-a.start)},(_,j)=>a.start+j));for(const h of sampledHours){const w=ST.weather?.[h];if(!w)continue;const adjustment=garments.reduce((sum,g)=>sum+warmth(g),0);const target=72;score-=Math.max(0,Math.abs(w.temp+adjustment-target)-6)*0.75/Math.max(1,sampledHours.length);}
-for(const a of ST.activities){const matching=garments.some(g=>(g.occasions||[]).some(o=>String(o).toLowerCase()===a.type.toLowerCase()));if(matching)score+=2;}
-if(ST.vibe==='Sporty'&&garments.some(g=>(g.style_tags||[]).some(t=>/sport|athlet/i.test(t))))score+=5;
-return {garments,score:Math.round(score),layer};}).sort((a,b)=>b.score-a.score);
-if(variants.length)families.push({base:required,variants,score:variants[0].score,id:required.map(x=>x.item_code).join('/')});}}
-return families.sort((a,b)=>b.score-a.score).slice(0,50);
+function scheduleHours(){const out=new Set();for(const a of ST.activities)for(let h=a.start;h<a.end;h++)out.add(h);return [...out].sort((a,b)=>a-b)}
+function compatibleSet(items){return items.every((x,i)=>items.slice(i+1).every(y=>pair(x,y)))}
+function build(){
+const by={top:[],bottom:[],shoe:[],outer:[],dress:[]};
+for(const x of state.items){let role=group(x.category);if(role)by[role].push(x)}
+const hours=scheduleHours(),temps=hours.map(h=>ST.weather?.[h]?.temp).filter(Number.isFinite);
+const hottest=temps.length?Math.max(...temps):null,coldest=temps.length?Math.min(...temps):null;
+const categoryRank=x=>x.category==='Dresses'?0:1;
+let candidates=[];
+const bases=[];
+for(const top of by.top)for(const bottom of by.bottom)if(pair(top,bottom))bases.push([top,bottom]);
+for(const dress of by.dress)bases.push([dress]);
+for(const base of bases)for(const shoe of by.shoe){
+ const required=[...base,shoe];
+ if(!compatibleSet(required))continue;
+ // Every scheduled activity must be represented by at least one garment occasion.
+ if(ST.activities.some(a=>!required.some(g=>(g.occasions||[]).some(o=>o.toLowerCase()===a.type.toLowerCase()))))continue;
+ const baseTemp=required.reduce((t,g)=>t+warmth(g),0);
+ // Warmest hour must be comfortable in the base outfit, without a coat.
+ if(hottest!==null&&Math.abs(hottest+baseTemp-72)>9)continue;
+ const layers=[null,...by.outer.filter(o=>compatibleSet([...required,o]))];
+ let variants=[];
+ for(const layer of layers){
+   const garments=layer?[...required,layer]:required;
+   const total=baseTemp+(layer?warmth(layer):0);
+   // Coldest hour should be comfortable with optional removable outerwear.
+   if(coldest!==null&&Math.abs(coldest+total-72)>9)continue;
+   const warmError=hottest===null?0:Math.abs(hottest+baseTemp-72);
+   const coldError=coldest===null?0:Math.abs(coldest+total-72);
+   const score=100-Math.round((warmError+coldError)*2);
+   variants.push({garments,score,layer});
+ }
+ if(!variants.length)continue;
+ variants.sort((a,b)=>b.score-a.score);
+ candidates.push({base:required,variants,score:variants[0].score,id:required.map(x=>x.item_code).join('/'),rank:categoryRank(base[0])});
 }
-function results(){if(!byid('st-outfit'))return;const groups=build();byid('st-count').textContent=`${groups.length} families`;ST.cluster=Math.min(ST.cluster,Math.max(0,groups.length-1));let g=groups[ST.cluster];if(!g){byid('st-families').innerHTML='';byid('st-outfit').innerHTML=`<div class="empty-s">No approved outfit combinations yet.<br><span class="small">Use the Compatibility Trainer to approve garments that go together. For separates, a top–bottom and bottom–shoe approval are required.</span></div>`;return}
-byid('st-families').innerHTML=groups.map((x,i)=>`<button class="${i===ST.cluster?'active':''}" data-st="family" data-index="${i}">Family ${i+1}</button>`).join('');ST.variant=Math.min(ST.variant,g.variants.length-1);const v=g.variants[ST.variant];byid('st-outfit').innerHTML=`<div class="outfit-grid">${v.garments.map(x=>`<div class="garment-s"><img src="${E(getimage(x))}" alt="${E(x.name)}"><div class="name">${E(x.name)}</div></div>`).join('')}</div><div class="navigator-s"><button class="tiny" data-st="previous">‹</button><span>Variation ${ST.variant+1} of ${g.variants.length} · Estimated fit ${v.score}</span><button class="tiny" data-st="next">›</button></div>`;
+candidates.sort((a,b)=>b.score-a.score);
+// Outfits sharing 2 of 3 base pieces are variations, not new clusters.
+const clusters=[];
+for(const candidate of candidates){
+ const codes=new Set(candidate.base.map(x=>x.item_code));
+ const existing=clusters.find(g=>{
+   const overlap=g.base.filter(x=>codes.has(x.item_code)).length;
+   return overlap>=Math.min(2,candidate.base.length,g.base.length);
+ });
+ if(existing){
+   existing.variants.push(...candidate.variants);
+   existing.variants.sort((a,b)=>b.score-a.score);
+ }else clusters.push(candidate);
+}
+return clusters.slice(0,30);
+}
+function results(){if(!byid('st-outfit'))return;const groups=build();byid('st-count').textContent=`${groups.length} clusters`;ST.cluster=Math.min(ST.cluster,Math.max(0,groups.length-1));let g=groups[ST.cluster];if(!g){byid('st-families').innerHTML='';byid('st-outfit').innerHTML=`<div class="empty-s">No outfits match your schedule, compatibility approvals, and temperature range.<br><span class="small">Try additional compatibility approvals, more clothing, or a different date or schedule.</span></div>`;return}
+byid('st-families').innerHTML=groups.map((x,i)=>`<button class="${i===ST.cluster?'active':''}" data-st="family" data-index="${i}">Cluster ${i+1}</button>`).join('');ST.variant=Math.min(ST.variant,g.variants.length-1);const v=g.variants[ST.variant];byid('st-outfit').innerHTML=`<div class="outfit-grid">${v.garments.map(x=>`<div class="garment-s"><img src="${E(getimage(x))}" alt="${E(x.name)}"><div class="name">${E(x.name)}</div></div>`).join('')}</div><div class="navigator-s"><button class="tiny" data-st="previous">‹</button><span>Variation ${ST.variant+1} of ${g.variants.length} · Estimated fit ${v.score}</span><button class="tiny" data-st="next">›</button></div>`;
 }
 async function getWeather(){if(ST.lat==null||ST.lon==null)return;const key=`${ST.lat},${ST.lon},${ST.date}`;if(ST.weatherKey===key&&ST.weather)return;ST.weather=null;ST.weatherMessage='Loading forecast…';forecast();try{const url=`https://api.open-meteo.com/v1/forecast?latitude=${ST.lat}&longitude=${ST.lon}&hourly=temperature_2m,precipitation_probability,snowfall,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=16`;const res=await fetch(url);if(!res.ok)throw Error('Forecast service unavailable');const d=await res.json();const hours=Array.from({length:24},(_,h)=>{const idx=d.hourly.time.indexOf(`${ST.date}T${String(h).padStart(2,'0')}:00`);return idx<0?null:{temp:d.hourly.temperature_2m[idx],rain:d.hourly.precipitation_probability[idx]??0,snow:d.hourly.snowfall[idx]??0,code:d.hourly.weather_code[idx]}});if(hours.every(x=>!x))throw Error('Forecast unavailable for this date (typically limited to the next 16 days)');ST.weather=hours;ST.weatherKey=key;ST.weatherMessage='';}catch(e){ST.weatherMessage=e.message;ST.weatherKey='';}forecast();results();}
 async function searchLocation(){let name=byid('st-location')?.value.trim();if(!name)return;ST.weatherMessage='Looking up location…';forecast();try{let r=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`);let d=await r.json();if(!d.results?.length)throw Error('Location not found');let c=d.results[0];ST.lat=c.latitude;ST.lon=c.longitude;ST.location=[c.name,c.admin1,c.country].filter(Boolean).join(', ');byid('st-location').value=ST.location;await getWeather()}catch(e){ST.weatherMessage=e.message;forecast()}}
