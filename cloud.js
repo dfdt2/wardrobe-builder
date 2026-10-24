@@ -1,7 +1,7 @@
 /* Supabase cloud adapter. Client only uses publishable/anon key, never service role. */
 (() => {
 const CFGKEY='wardrobe-cloud-config-v1'; const cloud={client:null,user:null,busy:false,connected:false,ready:false,saving:false,queued:false,baselinePairs:{},dirty:false};
-const allowed=['item_code','name','category','subcategory','brand','colors','materials','pattern','occasions','seasons','style_tags','image_path','insulation_clo_estimate','warmth_rating','warmth_source','wind_resistance','water_resistance','wet_weather_sensitivity','traction_rating','layering_role','coverage_regions'];
+const allowed=['item_code','name','category','subcategory','brand','colors','materials','pattern','occasions','seasons','style_tags','image_path','insulation_clo_estimate'];
 const config=()=>{try{return JSON.parse(localStorage.getItem(CFGKEY))||{}}catch{return {}}};
 const message=(m)=>{let el=document.getElementById('cloudmsg');if(el)el.textContent=m;console.info('[Wardrobe sync]',m)};
 function getClient(){let c=config();if(!c.url||!c.key)throw Error('Enter the Supabase project URL and publishable/anon key first.');if(!window.supabase?.createClient)throw Error('Supabase library unavailable. Serve this app over HTTP(S), with internet access.');return cloud.client ||= window.supabase.createClient(c.url,c.key);}
