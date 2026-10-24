@@ -113,3 +113,13 @@
 .stylist .family-chips{display:flex;flex-wrap:nowrap;width:100%;max-width:100%;min-width:0;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;scrollbar-width:none;touch-action:pan-x;box-sizing:border-box}
 .stylist .family-chips::-webkit-scrollbar{display:none}
 .stylist .family-chips button{flex:0 0 auto}
+
+/* Single shared schedule time track with two independent handles. */
+.stylist .time-slider-s{min-width:0;width:100%;padding:0 10px}
+.stylist .range-labels-s{display:flex;justify-content:space-between;gap:8px;font-size:14px;font-weight:500;font-variant-numeric:tabular-nums;margin-bottom:7px;color:#333}
+.stylist .time-range-track{position:relative;width:100%;height:29px;touch-action:none;cursor:pointer;user-select:none;-webkit-user-select:none}
+.stylist .time-range-track:before{content:"";position:absolute;left:0;right:0;top:12px;height:5px;background:#e2e2e5;border-radius:4px}
+.stylist .time-range-fill{position:absolute;left:var(--start);right:calc(100% - var(--end));top:12px;height:5px;background:#303030;border-radius:4px;pointer-events:none}
+.stylist button.time-range-handle{position:absolute;top:5px;transform:translateX(-50%);width:20px;height:20px;padding:0;border:3px solid white;border-radius:50%;background:#292929;box-shadow:0 0 0 1px #8f8f95;touch-action:none;cursor:grab;z-index:2}
+.stylist button.time-range-handle:focus-visible{outline:2px solid #555;outline-offset:4px}
+@media(max-width:420px){.stylist .range-labels-s{font-size:13px}}
