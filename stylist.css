@@ -20,3 +20,38 @@
 .stylist .navigator-s{display:flex;justify-content:space-between;align-items:center;margin-top:11px;color:#888;font-size:12px}
 .stylist .empty-s{color:#777;padding:25px 5px;text-align:center;line-height:1.7}
 @media(max-width:720px){.stylist{padding:14px 12px 26px}.stylist .layout{grid-template-columns:1fr;gap:0}.stylist .panel-s{padding:13px}.stylist .activity-s{grid-template-columns:minmax(0,1fr) 73px 73px 22px}.stylist .activity-s select{padding:7px 3px;font-size:11px}.stylist .garment-s img{height:125px}}
+
+/* Stylist date and schedule */
+.stylist .date-wrap-s{display:flex;flex:1;align-items:center;gap:7px;min-width:145px;border:1px solid #ddd;border-radius:9px;padding:0 9px;background:white}
+.stylist .date-wrap-s>span{font-size:14px;font-weight:600;white-space:nowrap}
+.stylist .date-wrap-s input{border:0;min-width:0;flex:1;padding:9px 0;width:100%}
+.stylist .activity-s{grid-template-columns:minmax(100px,0.8fr) minmax(0,1.7fr) 34px;gap:12px;align-items:center;margin-bottom:18px}
+.stylist .activity-s>select{font-size:14px;padding:10px;min-width:0}
+.stylist button.tiny.remove-s{width:34px;height:34px;display:grid;place-items:center;padding:0;font-size:23px;line-height:1}
+.stylist .time-slider-s{min-width:0;padding:1px 0}
+.stylist .time-labels-s{display:flex;justify-content:space-between;font-size:14px;font-weight:500;color:#393939;margin-bottom:7px;font-variant-numeric:tabular-nums}
+.stylist .range-pair-s{height:24px;position:relative;--range-start:33%;--range-end:70%;background:linear-gradient(to right,#e3e4e6 0%,#e3e4e6 var(--range-start),#292929 var(--range-start),#292929 var(--range-end),#e3e4e6 var(--range-end),#e3e4e6 100%) center/100% 5px no-repeat;border-radius:12px}
+.stylist .range-pair-s input[type=range]{position:absolute;top:0;left:0;width:100%;height:24px;margin:0;padding:0;border:0;background:none;pointer-events:none;appearance:none;-webkit-appearance:none}
+.stylist .range-pair-s input[type=range]::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:19px;height:19px;border:3px solid white;border-radius:50%;background:#252525;box-shadow:0 0 0 1px #999;pointer-events:auto;cursor:grab}
+.stylist .range-pair-s input[type=range]::-moz-range-thumb{width:14px;height:14px;border:3px solid white;border-radius:50%;background:#252525;box-shadow:0 0 0 1px #999;pointer-events:auto;cursor:grab}
+.stylist .range-pair-s input[data-key=start]{z-index:2}.stylist .range-pair-s input[data-key=end]{z-index:3}
+@media(max-width:420px){.stylist .activity-s{grid-template-columns:minmax(76px,.9fr) minmax(0,1.5fr) 30px;gap:8px}.stylist .activity-s>select{font-size:14px;padding:9px 4px}.stylist button.tiny.remove-s{width:30px;height:30px}.stylist .time-labels-s{font-size:12px}}
+/* Scenic weather cards, retaining high-contrast forecast numbers. */
+.stylist .forecast-s{gap:7px}
+.stylist .forecast-s .weather-card-s{position:relative;isolation:isolate;overflow:hidden;min-height:115px;display:flex;flex-direction:column;justify-content:space-between;align-items:center;gap:4px;padding:11px 3px;border-radius:12px;color:#25344b;text-shadow:0 1px 2px #ffffffa6;background:linear-gradient(150deg,#c4d5e1,#e1e7ea)}
+.stylist .forecast-s .weather-card-s>*:not(.weather-art-s){z-index:2;position:relative}
+.stylist .forecast-s .weather-card-s b{font-size:23px;line-height:1.2}
+.stylist .forecast-s .weather-card-s small{font-size:11px;font-weight:600;color:inherit}
+.stylist .weather-art-s{position:absolute;inset:0;pointer-events:none}
+.stylist .forecast-s .weather-sunny{background:linear-gradient(150deg,#76b9e4,#add5e9 56%,#f2d18e)}
+.stylist .weather-sunny .weather-art-s:before,.stylist .weather-partly .weather-art-s:before{content:"";position:absolute;width:68px;height:68px;right:-26px;top:-24px;border-radius:50%;background:#fff0aa;box-shadow:0 0 32px 16px #ffe0a48c}
+.stylist .forecast-s .weather-partly{background:linear-gradient(145deg,#9fc6e0,#d9e2e9 70%,#e8d5ae)}
+.stylist .weather-partly .weather-art-s:after,.stylist .weather-cloudy .weather-art-s:after{content:"";position:absolute;right:-8px;top:28px;width:90px;height:27px;border-radius:50%;background:#f6f7f7d9;box-shadow:-20px 10px 0 2px #dce5ecc9,-53px 0 0 -6px #fffd}
+.stylist .forecast-s .weather-cloudy{background:linear-gradient(145deg,#afc2d0,#e1e7e9)}
+.stylist .forecast-s .weather-rain{background:linear-gradient(150deg,#5c8ba6,#a5bdcc);color:white;text-shadow:0 1px 3px #19384e}
+.stylist .weather-rain .weather-art-s:after,.stylist .weather-storm .weather-art-s:after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(109deg,transparent 0px,transparent 17px,#ffffff45 18px,#ffffff45 19px,transparent 20px,transparent 30px);transform:translateY(15px)}
+.stylist .forecast-s .weather-storm{background:linear-gradient(145deg,#4b5e7f,#8991aa);color:white;text-shadow:0 1px 3px #17243a}
+.stylist .weather-storm .weather-art-s:before{content:"";position:absolute;right:6px;top:2px;width:43px;height:65px;background:#fff0ae;clip-path:polygon(55% 0,15% 48%,45% 48%,24% 100%,92% 36%,60% 36%,83% 0);opacity:.68}
+.stylist .forecast-s .weather-snow{background:linear-gradient(150deg,#b7d8e9,#e7eef3);color:#355369}
+.stylist .weather-snow .weather-art-s:after{content:"✳  ·  ✳";position:absolute;right:1px;top:17px;font-size:21px;color:#fffc}
+@media(max-width:400px){.stylist .forecast-s{gap:5px}.stylist .forecast-s .weather-card-s{min-height:105px}.stylist .forecast-s .weather-card-s b{font-size:21px}.stylist .forecast-s .weather-card-s small{font-size:10px}}
