@@ -80,21 +80,31 @@ for(const base of bases)for(const shoe of by.shoe){
  variants.sort((a,b)=>b.score-a.score);
  candidates.push({base:required,variants,score:variants[0].score,id:required.map(x=>x.item_code).join('/'),rank:categoryRank(base[0])});
 }
-candidates.sort((a,b)=>b.score-a.score);
-// Outfits sharing 2 of 3 base pieces are variations, not new clusters.
-const clusters=[];
+// A cluster is uniquely defined by its core top + bottom, or by one dress.
+// Shoes and outerwear are independently eligible variations within that cluster.
+const clusterMap=new Map();
 for(const candidate of candidates){
- const codes=new Set(candidate.base.map(x=>x.item_code));
- const existing=clusters.find(g=>{
-   const overlap=g.base.filter(x=>codes.has(x.item_code)).length;
-   return overlap>=Math.min(2,candidate.base.length,g.base.length);
- });
- if(existing){
-   existing.variants.push(...candidate.variants);
-   existing.variants.sort((a,b)=>b.score-a.score);
- }else clusters.push(candidate);
+ const core=candidate.base.filter(x=>group(x.category)!=='shoe');
+ const key=core.map(x=>x.item_code).sort().join('::');
+ let cluster=clusterMap.get(key);
+ if(!cluster){
+  cluster={base:core,variants:[],score:candidate.score,id:key,rank:candidate.rank};
+  clusterMap.set(key,cluster);
+ }
+ cluster.variants.push(...candidate.variants);
 }
-return clusters.slice(0,30);
+const clusters=[...clusterMap.values()];
+for(const cluster of clusters){
+ const unique=new Map();
+ for(const variant of cluster.variants){
+  const key=variant.garments.map(x=>x.item_code).sort().join('::');
+  if(!unique.has(key)||unique.get(key).score<variant.score)unique.set(key,variant);
+ }
+ cluster.variants=[...unique.values()].sort((a,b)=>b.score-a.score);
+ cluster.score=cluster.variants[0].score;
+}
+clusters.sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id));
+return clusters;
 }
 function results(){if(!byid('st-outfit'))return;const groups=build();byid('st-count').textContent=`${groups.length} clusters`;ST.cluster=Math.min(ST.cluster,Math.max(0,groups.length-1));let g=groups[ST.cluster];if(!g){byid('st-families').innerHTML='';byid('st-outfit').innerHTML=`<div class="empty-s">No outfits satisfy your schedule, approved pairings, and total outfit warmth. Each base outfit needs a top, pants or skirt, and shoes—or a dress and shoes.<br><span class="small">Try additional compatibility approvals, more clothing, or a different date or schedule.</span></div>`;return}
 byid('st-families').innerHTML=groups.map((x,i)=>`<button class="${i===ST.cluster?'active':''}" data-st="family" data-index="${i}">Cluster ${i+1}</button>`).join('');ST.variant=Math.min(ST.variant,g.variants.length-1);const v=g.variants[ST.variant];byid('st-outfit').innerHTML=`<div class="outfit-grid">${v.garments.map(x=>`<div class="garment-s"><img src="${E(getimage(x))}" alt="${E(x.name)}"><div class="name">${E(x.name)}</div></div>`).join('')}</div><div class="navigator-s"><button class="tiny" data-st="previous">‹</button><span>Variation ${ST.variant+1} of ${g.variants.length} · Estimated fit ${v.score}</span><button class="tiny" data-st="next">›</button></div>`;
