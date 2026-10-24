@@ -73,3 +73,36 @@
 .stylist .slot-controls button:disabled{opacity:.22}
 .stylist .slot-controls small{color:#777;font-size:12px}
 .stylist .slot-foot{text-align:center;color:#777;font-size:13px;margin-top:10px}
+
+/* iOS-responsive stylist controls; separate native sliders prevent stacked-hitbox glitches. */
+.stylist,.stylist *{box-sizing:border-box}
+.stylist{width:100%;min-width:0}
+.stylist .layout,.stylist .layout>div,.stylist .panel-s{min-width:0;max-width:100%}
+.stylist .activity-s{grid-template-columns:minmax(105px,0.8fr) minmax(0,1.6fr) 36px;align-items:start}
+.stylist .time-slider-s{display:grid;gap:12px;min-width:0;width:100%}
+.stylist .single-time-s{display:grid;gap:7px;min-width:0}
+.stylist .single-time-s>span{display:flex;justify-content:space-between;gap:6px;font-size:14px;color:#555}
+.stylist .single-time-s b{font-weight:600;color:#222;white-space:nowrap}
+.stylist .single-time-s input[type=range]{display:block;position:static;width:100%;max-width:none;min-width:0;height:30px;padding:0;margin:0;appearance:auto;-webkit-appearance:auto;touch-action:pan-y;accent-color:#272727;border:0;background:transparent}
+.stylist .single-time-s input[type=range]::-webkit-slider-thumb{cursor:grab}
+@media(max-width:720px){
+ .stylist{padding:12px 12px 32px;font-size:16px}
+ .stylist .panel-s{padding:15px 13px;margin-bottom:14px}
+ .stylist .panel-s h2{font-size:18px}
+ .stylist select,.stylist input:not([type=range]),.stylist .activity-s>select{font-size:16px}
+ .stylist .activity-s{grid-template-columns:minmax(0,1fr) 38px;gap:10px;margin-bottom:20px}
+ .stylist .activity-s>select{grid-column:1;grid-row:1;width:100%;min-height:44px;padding:9px 11px}
+ .stylist .activity-s .time-slider-s{grid-column:1;grid-row:2}
+ .stylist .activity-s .remove-s{grid-column:2;grid-row:1;width:38px;height:44px}
+ .stylist .single-time-s>span{font-size:15px}
+ .stylist .single-time-s input[type=range]{height:36px}
+ .stylist .forecast-s .weather-card-s{min-height:118px}
+ .stylist .forecast-s .weather-card-s small{font-size:12px}
+ .stylist .stylist-slots{gap:10px}
+ .stylist .stylist-slot{padding:8px}
+ .stylist .slot-head{font-size:14px}
+ .stylist .stylist-slot .garment-s .name{font-size:13px}
+ .stylist .slot-controls button{height:40px;width:40px}
+ .stylist .date-wrap-s{min-width:0;max-width:100%}
+ .stylist .location-input input{font-size:16px}
+}
