@@ -20,7 +20,7 @@ function body(){
   <div class="small" id="st-weather-msg" role="status" style="display:none"></div><div id="st-forecast" class="forecast-s"></div></section>
   <section class="panel-s"><h2>Schedule</h2><div id="st-activities"></div><button class="tiny" data-st="add">+ Add activity</button></section>
 
-  </div><div><section class="panel-s"><div class="line-s"><h2>Outfit clusters</h2><span class="small" id="st-count"></span></div><div class="family-chips" id="st-families"></div><div id="st-outfit"></div></section></div></div></section>`;
+  </div><div><section class="panel-s"><div class="line-s"><h2>Outfit</h2><span class="small" id="st-count"></span></div><div id="st-outfit"></div></section></div></div></section>`;
 }
 function weatherTheme(w){if(!w)return 'neutral';if([95,96,99].includes(w.code))return 'storm';if(w.snow>0||[71,73,75,77,85,86].includes(w.code))return 'snow';if([51,53,55,61,63,65,80,81,82].includes(w.code)||w.rain>=70)return 'rain';if([0,1].includes(w.code))return 'sunny';if(w.code===2)return 'partly';return 'cloudy'}
 function forecast(){const slot=byid('st-forecast');if(!slot)return;slot.innerHTML=ST.weather?[8,12,16,20].map(h=>{const w=ST.weather[h];return `<div class="weather-card-s weather-${weatherTheme(w)}"><span class="weather-art-s" aria-hidden="true"></span><small>${time(h)}</small><b>${w?Math.round(w.temp)+'°':'—'}</b>${w?`<small>${Math.round(w.rain)}% rain</small>`:''}</div>`}).join(''):'';const msg=byid('st-weather-msg');if(msg){msg.textContent=ST.weatherMessage;msg.style.display=ST.weather||!ST.weatherMessage?'none':'block';}}
@@ -80,32 +80,14 @@ for(const base of bases)for(const shoe of by.shoe){
  variants.sort((a,b)=>b.score-a.score);
  candidates.push({base:required,variants,score:variants[0].score,id:required.map(x=>x.item_code).join('/'),rank:categoryRank(base[0])});
 }
-// A cluster is uniquely defined by its core top + bottom, or by one dress.
-// Shoes and outerwear are independently eligible variations within that cluster.
-// Greedy representative grouping: a new separates cluster requires BOTH a different
-// top and a different bottom from every existing separates cluster representative.
-// Dresses each define their own cluster. Candidates are already ranked by comfort.
-// Each distinct bottom defines one cluster. Dresses define their own.
-const map=new Map();
-for(const candidate of candidates){
- const bottom=candidate.base.find(x=>group(x.category)==='bottom');
- const dress=candidate.base.find(x=>group(x.category)==='dress');
- const key=dress?'dress:'+dress.item_code:'bottom:'+bottom.item_code;
- if(!map.has(key))map.set(key,{base:[dress||bottom],variants:[],score:candidate.score,id:key});
- map.get(key).variants.push(...candidate.variants);
+// One shared pool of fully validated outfits. Each garment slot can be browsed.
+const unique=new Map();
+for(const candidate of candidates)for(const variant of candidate.variants){
+ const key=variant.garments.map(g=>g.item_code).sort().join('::');
+ if(!unique.has(key)||unique.get(key).score<variant.score)unique.set(key,variant);
 }
-const clusters=[...map.values()];
-for(const cluster of clusters){
- const unique=new Map();
- for(const variant of cluster.variants){
-  const key=variant.garments.map(x=>x.item_code).sort().join('::');
-  if(!unique.has(key)||unique.get(key).score<variant.score)unique.set(key,variant);
- }
- cluster.variants=[...unique.values()].sort((a,b)=>b.score-a.score);
- cluster.score=cluster.variants[0].score;
-}
-clusters.sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id));
-return clusters;
+const variants=[...unique.values()].sort((a,b)=>b.score-a.score);
+return variants.length?[{id:'all-outfits',variants}]:[];
 }
 const SLOT_ORDER=['top','outer','bottom','shoe'];
 let slotSelection={};
@@ -118,12 +100,12 @@ function filteredVariants(cluster,omit=null){
 function optionsForSlot(cluster,role){const ix=slotSelectionOrder.indexOf(role);const earlier=ix<0?slotSelectionOrder:slotSelectionOrder.slice(0,ix);return cluster.variants.filter(v=>earlier.every(k=>(garmentFor(v,k)?.item_code||'')===slotSelection[k]));}
 function results(){
  if(!byid('st-outfit'))return;
- const groups=build();byid('st-count').textContent=groups.length+' clusters';
+ const groups=build();byid('st-count').textContent='';
  ST.cluster=Math.min(ST.cluster,Math.max(0,groups.length-1));
  const g=groups[ST.cluster];
- if(!g){byid('st-families').innerHTML='';byid('st-outfit').innerHTML='<div class="empty-s">No outfits satisfy all compatibility, activity and temperature requirements.</div>';return}
+ if(!g){byid('st-outfit').innerHTML='<div class="empty-s">No outfits satisfy all compatibility, activity and temperature requirements.</div>';return}
  if(lastClusterKey!==g.id){lastClusterKey=g.id;slotSelection={};slotSelectionOrder=[]}
- byid('st-families').innerHTML=groups.map((x,i)=>'<button class="'+(i===ST.cluster?'active':'')+'" data-st="family" data-index="'+i+'">Cluster '+(i+1)+'</button>').join('');
+ 
  // Reconcile selections after changing another slot, never show invalid combinations.
  let matching=filteredVariants(g);
  if(!matching.length){slotSelection={};slotSelectionOrder=[];matching=g.variants}
