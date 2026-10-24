@@ -106,3 +106,10 @@
  .stylist .date-wrap-s{min-width:0;max-width:100%}
  .stylist .location-input input{font-size:16px}
 }
+
+/* Keep cluster navigation contained to its panel, even with many clusters. */
+.stylist,.stylist .layout,.stylist .layout>div,.stylist .panel-s{min-width:0;max-width:100%}
+.stylist .panel-s{overflow:hidden}
+.stylist .family-chips{display:flex;flex-wrap:nowrap;width:100%;max-width:100%;min-width:0;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;scrollbar-width:none;touch-action:pan-x;box-sizing:border-box}
+.stylist .family-chips::-webkit-scrollbar{display:none}
+.stylist .family-chips button{flex:0 0 auto}
