@@ -1,6 +1,6 @@
 /* Integrated stylist: uses Builder state.items / state.pairs, not demo approvals. */
 (()=>{
-const TYPES=['Work','Daily','Date','Party','Travel','Home','Sport','Formal','Outdoor'];
+const TYPES=['Work','Daily','Date','Business','Home','Party','Sport','Special'];
 const VIBES=['Casual','Minimal','Polished','Sporty','Romantic','Edgy'];
 const iso=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
 const ST={date:iso(),location:'',lat:null,lon:null,weather:null,weatherKey:'',weatherMessage:'Choose a location to retrieve a forecast.',activities:[{type:'Work',start:8,end:17}],vibe:'Casual',cluster:0,variant:0,requesting:false,geolocationTried:false};
@@ -23,7 +23,7 @@ function forecast(){const slot=byid('st-forecast');if(!slot)return;slot.innerHTM
 function schedule(){const slot=byid('st-activities');if(!slot)return;slot.innerHTML=ST.activities.map((a,i)=>`<div class="activity-s"><select aria-label="Activity ${i+1}" data-st-activity="${i}" data-key="type">${options(a.type,TYPES)}</select><select aria-label="Start time" data-st-activity="${i}" data-key="start">${Array.from({length:24},(_,h)=>`<option value="${h}" ${a.start===h?'selected':''}>${time(h)}</option>`).join('')}</select><select aria-label="End time" data-st-activity="${i}" data-key="end">${Array.from({length:24},(_,i)=>i+1).map(h=>`<option value="${h}" ${a.end===h?'selected':''}>${time(h)}</option>`).join('')}</select><button class="tiny" data-st="remove" data-index="${i}" title="Remove">×</button></div>`).join('');byid('st-vibes').innerHTML=VIBES.map(v=>`<button class="${v===ST.vibe?'active':''}" data-st="vibe" data-vibe="${v}">${v}</button>`).join('')}
 function group(name){const n=String(name||'').toLowerCase();if(n==='tops'||n==='top')return 'top';if(['pants','skirts','shorts','bottoms'].includes(n))return 'bottom';if(['shoes','footwear'].includes(n))return 'shoe';if(['outerwear','jackets','coats'].includes(n))return 'outer';if(n==='dresses')return 'dress';return null}
 function warmth(g){let x=Number(g.warmth_rating);if(Number.isFinite(x)&&x>0)return x*.9;let clo=Number(g.insulation_clo_estimate);return Number.isFinite(clo)&&clo>0?clo*6:0}
-function build(){const items=state.items.filter(x=>!x.archived);const by={top:[],bottom:[],shoe:[],outer:[],dress:[]};for(const x of items){let r=group(x.category);if(r)by[r].push(x)}
+function build(){const items=state.items;const by={top:[],bottom:[],shoe:[],outer:[],dress:[]};for(const x of items){let r=group(x.category);if(r)by[r].push(x)}
 const bases=[];for(const t of by.top)for(const b of by.bottom)if(pair(t,b))bases.push([t,b]);for(const d of by.dress)bases.push([d]);
 const families=[];
 for(const base of bases){for(const s of by.shoe){if(!base.every(g=>g===base[0]&&group(g.category)==='top'?pair(base[1],s):pair(g,s)))continue;
