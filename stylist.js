@@ -56,7 +56,8 @@ for(const base of bases)for(const shoe of by.shoe){
  const required=[...base,shoe];
  if(!validBaseOutfit(required)||!compatibleSet(required))continue;
  // Every scheduled activity must be represented by at least one garment occasion.
- if(ST.activities.some(a=>!base.some(g=>hasOccasion(g,a.type))))continue;
+ // Every required garment must carry every scheduled activity label.
+ if(ST.activities.some(a=>required.some(g=>!hasOccasion(g,a.type))))continue;
  const baseTemp=required.reduce((t,g)=>t+warmth(g),0);
  // The complete base outfit must be comfortable at the warmest scheduled hour.
  // A removable outer layer can then be included for the coldest hour.
@@ -65,6 +66,8 @@ for(const base of bases)for(const shoe of by.shoe){
  let variants=[];
  for(const layer of layers){
    const garments=layer?[...required,layer]:required;
+   // Optional outerwear must satisfy the same activity restrictions.
+   if(ST.activities.some(a=>garments.some(g=>!hasOccasion(g,a.type))))continue;
    const total=baseTemp+(layer?warmth(layer):0);
    // Reject a full outfit variant if its combined insulation misses the coldest hour.
    if(coldest!==null&&Math.abs(coldest+total-72)>9)continue;
