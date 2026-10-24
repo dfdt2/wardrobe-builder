@@ -60,3 +60,16 @@
 .stylist button.garment-s{display:block;width:100%;background:#fff;color:inherit;font:inherit;cursor:pointer}
 .stylist button.garment-s:focus-visible{outline:2px solid #333;outline-offset:2px}
 .stylist button.garment-s:hover{border-color:#b5b5b5}
+
+/* Four linked outfit slots, arranged top/jacket over bottom/shoes. */
+.stylist .stylist-slots{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.stylist .stylist-slot{min-width:0;border:1px solid #e4e4e4;border-radius:13px;padding:9px;background:#fff;touch-action:pan-y}
+.stylist .slot-head{font-size:13px;font-weight:600;color:#555;margin:2px 0 7px}
+.stylist .stylist-slot .garment-s{padding:4px;border:0;box-shadow:none}
+.stylist .stylist-slot .garment-s img{max-width:100%;object-fit:contain}
+.stylist .slot-empty{min-height:135px;display:grid;place-items:center;color:#999;font-size:13px;background:#f8f8f8;border-radius:8px}
+.stylist .slot-controls{display:flex;align-items:center;justify-content:space-between;margin-top:6px}
+.stylist .slot-controls button{width:34px;height:32px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:23px;line-height:1}
+.stylist .slot-controls button:disabled{opacity:.22}
+.stylist .slot-controls small{color:#777;font-size:12px}
+.stylist .slot-foot{text-align:center;color:#777;font-size:13px;margin-top:10px}
