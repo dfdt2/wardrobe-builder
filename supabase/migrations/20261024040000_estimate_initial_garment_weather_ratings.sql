@@ -1,0 +1,5 @@
+-- Applied Supabase migration: estimate_initial_garment_weather_ratings
+UPDATE public.garments SET warmth_rating=CASE lower(subcategory) WHEN 't-shirt' THEN 1 WHEN 'tank top' THEN 0 WHEN 'shirt' THEN 2 WHEN 'sweatshirt' THEN 4 WHEN 'sweater' THEN 5 WHEN 'shorts' THEN 0 WHEN 'jeans' THEN 2 WHEN 'trousers' THEN 2 WHEN 'track pants' THEN 2 WHEN 'leggings' THEN 1 WHEN 'pajama pants' THEN 2 WHEN 'trench coat' THEN 5 WHEN 'fur coat' THEN 8 WHEN 'jacket' THEN 4 WHEN 'cardigan' THEN 3 WHEN 'sports jacket' THEN 3 WHEN 'puffer jacket' THEN 8 WHEN 'sneakers' THEN 1 WHEN 'boots' THEN 2 ELSE 1 END, warmth_source='estimated' WHERE warmth_rating IS NULL;
+UPDATE public.garments SET wind_resistance=CASE WHEN category='Outerwear' THEN 2 WHEN category='Pants' THEN 1 ELSE 0 END WHERE wind_resistance IS NULL;
+UPDATE public.garments SET water_resistance=0 WHERE water_resistance IS NULL;
+UPDATE public.garments SET wet_weather_sensitivity=CASE WHEN 'Suede'=ANY(materials) THEN 3 ELSE 1 END WHERE wet_weather_sensitivity IS NULL;
