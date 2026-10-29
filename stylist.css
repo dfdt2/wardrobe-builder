@@ -130,3 +130,8 @@
 .stylist .set-anchor{display:block;margin:3px auto 8px;padding:5px 8px;background:transparent;border:0;color:#93846a;font-size:10px;cursor:pointer}
 .stylist .set-anchor:disabled{visibility:hidden}
 .stylist .stylist-slot{touch-action:pan-y}
+
+/* Random garment selection in outfit header */
+.stylist .outfit-actions-s{display:flex;align-items:center;gap:10px;margin-left:auto}
+.stylist .random-outfit-s{border:1px solid #e0e0e0;border-radius:9px;background:#fff;color:#252525;padding:7px 11px;font-size:12px;font-weight:600;white-space:nowrap}
+.stylist .random-outfit-s:active{background:#fff6cd}
