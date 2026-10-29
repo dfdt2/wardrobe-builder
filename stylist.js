@@ -56,12 +56,15 @@ const by={top:[],bottom:[],shoe:[],outer:[],dress:[],bag:[]};
 for(const x of state.items){let role=group(x.category);if(role)by[role].push(x)}
 const hours=scheduleHours(),temps=hours.map(h=>ST.weather?.[h]?.temp).filter(Number.isFinite);
 const hottest=temps.length?Math.max(...temps):null,coldest=temps.length?Math.min(...temps):null;
+// Exclude open-toed footwear if any scheduled hour is colder than 60°F.
+const excludeOpenToe=temps.some(t=>t<60);
+const eligibleShoes=by.shoe.filter(shoe=>!excludeOpenToe||!['sandals','sandal heels'].includes(String(shoe.subcategory||'').trim().toLowerCase()));
 const categoryRank=x=>x.category==='Dresses'?0:1;
 let candidates=[];
 const bases=[];
 for(const top of by.top)for(const bottom of by.bottom)if(pair(top,bottom))bases.push([top,bottom]);
 for(const dress of by.dress)bases.push([dress]);
-for(const base of bases)for(const shoe of by.shoe){
+for(const base of bases)for(const shoe of eligibleShoes){
  const required=[...base,shoe];
  if(!validBaseOutfit(required)||!compatibleSet(required))continue;
  // Every scheduled activity must be represented by at least one garment occasion.
