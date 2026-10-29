@@ -147,9 +147,9 @@ function results(){
   const current=garmentFor(chosen,role),code=current?.item_code||'';
   const index=possible.findIndex(x=>(x?.item_code||'')===code);
   const count=possible.length,canCycle=count>1;
-  return '<div class="stylist-slot'+(role===anchorRole?' anchor-slot':'')+'" data-swipe-role="'+role+'"><div class="slot-head">'+labels[role]+(role===anchorRole?' <span class="anchor-label">Anchor</span>':'')+'</div>'+ 
+  return '<div class="stylist-slot'+(role===anchorRole?' anchor-slot':'')+'" data-swipe-role="'+role+'"><div class="slot-head">'+labels[role]+'</div>'+ 
    (current?'<button type="button" class="garment-s" data-st="open-item" data-item-code="'+E(current.item_code)+'" aria-label="View '+E(current.name)+' details"><img src="'+E(getimage(current))+'" alt="'+E(current.name)+'"><div class="name">'+E(current.name)+'</div></button>':'<div class="slot-empty">No '+(role==='bag'?'bag':'jacket')+'</div>')+
-   '<button type="button" class="set-anchor" data-st="set-anchor" data-role="'+role+'" '+(role===anchorRole?'disabled':'')+'>Set as anchor</button><div class="slot-controls"><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="-1" '+(!canCycle?'disabled':'')+' aria-label="Previous '+labels[role]+'">‹</button><small>'+(index+1)+' / '+count+'</small><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="1" '+(!canCycle?'disabled':'')+' aria-label="Next '+labels[role]+'">›</button></div></div>';
+   '<div class="slot-controls"><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="-1" '+(!canCycle?'disabled':'')+' aria-label="Previous '+labels[role]+'">‹</button><small>'+(index+1)+' / '+count+'</small><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="1" '+(!canCycle?'disabled':'')+' aria-label="Next '+labels[role]+'">›</button></div></div>';
  }).join('');
  byid('st-outfit').innerHTML='<div class="stylist-slots">'+slots+'</div><p class="slot-foot">'+matching.length+' compatible complete outfit'+(matching.length===1?'':'s')+'</p>';
  const holder=byid('st-outfit');
