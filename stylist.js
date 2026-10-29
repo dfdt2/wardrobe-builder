@@ -34,12 +34,12 @@ function finishTimeDrag(e){if(!activeTimeDrag||e.pointerId!==activeTimeDrag.id)r
 document.addEventListener('pointerup',finishTimeDrag);document.addEventListener('pointercancel',finishTimeDrag);
 document.addEventListener('keydown',e=>{const h=e.target.closest('[data-range-handle]');if(state.page!=='stylist'||!h||!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;const bar=h.closest('[data-time-range]'),i=Number(bar.dataset.timeRange),k=h.dataset.rangeHandle,a=ST.activities[i];let n=a[k];if(e.key==='ArrowLeft')n--;if(e.key==='ArrowRight')n++;if(e.key==='Home')n=k==='start'?0:a.start+1;if(e.key==='End')n=k==='start'?a.end-1:24;moveTimeHandle(i,k,n);results();e.preventDefault()});
 
-function group(name){const n=String(name||'').toLowerCase();if(n==='tops'||n==='top')return 'top';if(['pants','skirts','shorts','bottoms'].includes(n))return 'bottom';if(['shoes','footwear'].includes(n))return 'shoe';if(['outerwear','jackets','coats'].includes(n))return 'outer';if(n==='dresses')return 'dress';return null}
+function group(name){const n=String(name||'').toLowerCase();if(n==='tops'||n==='top')return 'top';if(['pants','skirts','shorts','bottoms'].includes(n))return 'bottom';if(['shoes','footwear'].includes(n))return 'shoe';if(['outerwear','jackets','coats'].includes(n))return 'outer';if(n==='dresses')return 'dress';if(n==='bags')return 'bag';return null}
 function warmth(g){return estimatedClo(g)*25} // °F contribution is a heuristic, not a physical conversion
 function scheduleHours(){const out=new Set();for(const a of ST.activities)for(let h=a.start;h<a.end;h++)out.add(h);return [...out].sort((a,b)=>a-b)}
 // Require approval only for relationships that the trainer offers for evaluation.
-const ROLE=c=>c==='Tops'?'top':(['Pants','Skirts'].includes(c)?'bottom':c==='Shoes'?'shoe':c==='Outerwear'?'outer':null);
-const TRAINABLE=new Set(['bottom|top','bottom|shoe','bottom|outer']);
+const ROLE=c=>c==='Tops'?'top':(['Pants','Skirts'].includes(c)?'bottom':c==='Shoes'?'shoe':c==='Outerwear'?'outer':c==='Bags'?'bag':c==='Dresses'?'dress':null);
+const TRAINABLE=new Set(['bottom|top','bottom|shoe','bottom|outer','bag|top','bag|outer','bag|dress']);
 function trainerEligible(a,b){const x=ROLE(a.category),y=ROLE(b.category);return !!(x&&y&&TRAINABLE.has([x,y].sort().join('|')))}
 function compatibleSet(items){return items.every((x,i)=>items.slice(i+1).every(y=>(trainerEligible(x,y)?pair(x,y):state.pairs[[x.item_code,y.item_code].sort().join('::')]!==false)))}
 function hasOccasion(g,type){return (g.occasions||[]).some(o=>String(o).trim().toLowerCase()===String(type).trim().toLowerCase())}
@@ -52,7 +52,7 @@ function validBaseOutfit(items){
  return items.length===(dressLook?2:3)&&(dressLook||separatesLook);
 }
 function build(){
-const by={top:[],bottom:[],shoe:[],outer:[],dress:[]};
+const by={top:[],bottom:[],shoe:[],outer:[],dress:[],bag:[]};
 for(const x of state.items){let role=group(x.category);if(role)by[role].push(x)}
 const hours=scheduleHours(),temps=hours.map(h=>ST.weather?.[h]?.temp).filter(Number.isFinite);
 const hottest=temps.length?Math.max(...temps):null,coldest=temps.length?Math.min(...temps):null;
@@ -70,7 +70,7 @@ for(const base of bases)for(const shoe of by.shoe){
  const baseTemp=required.reduce((t,g)=>t+warmth(g),0);
  // The complete base outfit must be comfortable at the warmest scheduled hour.
  // A removable outer layer can then be included for the coldest hour.
- if(hottest!==null&&Math.abs(hottest+baseTemp-72)>9)continue;
+ if(hottest!==null&&Math.abs(hottest+baseTemp-72)>5)continue;
  const layers=[null,...by.outer.filter(o=>compatibleSet([...required,o]))];
  let variants=[];
  for(const layer of layers){
@@ -79,11 +79,15 @@ for(const base of bases)for(const shoe of by.shoe){
    if(ST.activities.some(a=>garments.some(g=>!hasOccasion(g,a.type))))continue;
    const total=baseTemp+(layer?warmth(layer):0);
    // Reject a full outfit variant if its combined insulation misses the coldest hour.
-   if(coldest!==null&&Math.abs(coldest+total-72)>9)continue;
+   if(coldest!==null&&Math.abs(coldest+total-72)>5)continue;
    const warmError=hottest===null?0:Math.abs(hottest+baseTemp-72);
    const coldError=coldest===null?0:Math.abs(coldest+total-72);
    const score=Math.max(0,100-Math.round((warmError+coldError)*2));
-   variants.push({garments,score,layer});
+   for(const bag of [null,...by.bag]){
+     if(bag&&!compatibleSet([...garments,bag]))continue;
+     if(bag&&ST.activities.some(a=>!hasOccasion(bag,a.type)))continue;
+     variants.push({garments:bag?[...garments,bag]:garments,score,layer});
+   }
  }
  if(!variants.length)continue;
  variants.sort((a,b)=>b.score-a.score);
@@ -98,7 +102,7 @@ for(const candidate of candidates)for(const variant of candidate.variants){
 const variants=[...unique.values()].sort((a,b)=>b.score-a.score);
 return variants.length?[{id:'all-outfits',variants}]:[];
 }
-const SLOT_ORDER=['top','outer','bottom','shoe'];
+const SLOT_ORDER=['top','outer','bottom','shoe','bag'];
 let slotSelection={};
 let slotSelectionOrder=[];
 let lastClusterKey='';
@@ -119,14 +123,14 @@ function results(){
  let matching=filteredVariants(g);
  if(!matching.length){slotSelection={};slotSelectionOrder=[];matching=g.variants}
  const chosen=matching[0];
- const labels={top:'Top / dress',outer:'Jacket',bottom:'Pants / skirt',shoe:'Shoes'};
+ const labels={top:'Top / dress',outer:'Jacket',bottom:'Pants / skirt',shoe:'Shoes',bag:'Bag'};
  const slots=SLOT_ORDER.map(role=>{
   const possible=[...new Map(optionsForSlot(g,role).map(v=>{const item=garmentFor(v,role);return [item?.item_code||'',item]})).values()];
   const current=garmentFor(chosen,role),code=current?.item_code||'';
   const index=possible.findIndex(x=>(x?.item_code||'')===code);
   const count=possible.length,canCycle=count>1;
   return '<div class="stylist-slot" data-swipe-role="'+role+'"><div class="slot-head">'+labels[role]+'</div>'+
-   (current?'<button type="button" class="garment-s" data-st="open-item" data-item-code="'+E(current.item_code)+'" aria-label="View '+E(current.name)+' details"><img src="'+E(getimage(current))+'" alt="'+E(current.name)+'"><div class="name">'+E(current.name)+'</div></button>':'<div class="slot-empty">No jacket</div>')+
+   (current?'<button type="button" class="garment-s" data-st="open-item" data-item-code="'+E(current.item_code)+'" aria-label="View '+E(current.name)+' details"><img src="'+E(getimage(current))+'" alt="'+E(current.name)+'"><div class="name">'+E(current.name)+'</div></button>':'<div class="slot-empty">No '+(role==='bag'?'bag':'jacket')+'</div>')+
    '<div class="slot-controls"><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="-1" '+(!canCycle?'disabled':'')+' aria-label="Previous '+labels[role]+'">‹</button><small>'+(index+1)+' / '+count+'</small><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="1" '+(!canCycle?'disabled':'')+' aria-label="Next '+labels[role]+'">›</button></div></div>';
  }).join('');
  byid('st-outfit').innerHTML='<div class="stylist-slots">'+slots+'</div><p class="slot-foot">'+matching.length+' compatible complete outfit'+(matching.length===1?'':'s')+'</p>';
