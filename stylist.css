@@ -125,7 +125,7 @@
 @media(max-width:420px){.stylist .range-labels-s{font-size:13px}}
 
 /* Anchor-based outfit selector */
-.stylist .stylist-slot.anchor-slot{border:2px solid #c4a15c!important;box-shadow:0 0 0 2px rgba(196,161,92,.13);border-radius:12px}
+.stylist .stylist-slot.anchor-slot{border:3px solid #f5c518!important;box-shadow:0 0 0 2px rgba(245,197,24,.16);border-radius:12px}
 .stylist .anchor-label{font-size:10px;color:#9b7635;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-left:5px}
 .stylist .set-anchor{display:block;margin:3px auto 8px;padding:5px 8px;background:transparent;border:0;color:#93846a;font-size:10px;cursor:pointer}
 .stylist .set-anchor:disabled{visibility:hidden}
