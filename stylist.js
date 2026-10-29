@@ -123,6 +123,15 @@ function results(){
  let matching=filteredVariants(g);
  if(!matching.length){slotSelection={};slotSelectionOrder=[];matching=g.variants}
  const chosen=matching[0];
+ // Outdoor comfort envelope: remove the optional coat when warm, add it when cold.
+ // Bags do not contribute insulation.
+ const baseGarments=chosen.garments.filter(g=>group(g.category)!=='outer'&&group(g.category)!=='bag');
+ const coat=chosen.garments.find(g=>group(g.category)==='outer');
+ const baseWarmth=baseGarments.reduce((sum,g)=>sum+warmth(g),0);
+ const layeredWarmth=baseWarmth+(coat?warmth(coat):0);
+ const low=Math.round(67-layeredWarmth),high=Math.round(77-baseWarmth);
+ byid('st-count').textContent='Comfort: '+low+'–'+high+'°F';
+ byid('st-count').title='Estimated outdoor comfort range, using optional outerwear at colder temperatures (72°F target ±5°F).';
  const labels={top:'Top / dress',outer:'Jacket',bottom:'Pants / skirt',shoe:'Shoes',bag:'Bag'};
  const slots=SLOT_ORDER.map(role=>{
   const possible=[...new Map(optionsForSlot(g,role).map(v=>{const item=garmentFor(v,role);return [item?.item_code||'',item]})).values()];
