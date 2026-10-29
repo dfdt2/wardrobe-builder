@@ -123,3 +123,10 @@
 .stylist button.time-range-handle{position:absolute;top:5px;transform:translateX(-50%);width:20px;height:20px;padding:0;border:3px solid white;border-radius:50%;background:#292929;box-shadow:0 0 0 1px #8f8f95;touch-action:none;cursor:grab;z-index:2}
 .stylist button.time-range-handle:focus-visible{outline:2px solid #555;outline-offset:4px}
 @media(max-width:420px){.stylist .range-labels-s{font-size:13px}}
+
+/* Anchor-based outfit selector */
+.stylist .stylist-slot.anchor-slot{border:2px solid #c4a15c!important;box-shadow:0 0 0 2px rgba(196,161,92,.13);border-radius:12px}
+.stylist .anchor-label{font-size:10px;color:#9b7635;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-left:5px}
+.stylist .set-anchor{display:block;margin:3px auto 8px;padding:5px 8px;background:transparent;border:0;color:#93846a;font-size:10px;cursor:pointer}
+.stylist .set-anchor:disabled{visibility:hidden}
+.stylist .stylist-slot{touch-action:pan-y}
