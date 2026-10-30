@@ -39,7 +39,7 @@ function warmth(g){return estimatedClo(g)*25} // °F contribution is a heuristic
 function scheduleHours(){const out=new Set();for(const a of ST.activities)for(let h=a.start;h<a.end;h++)out.add(h);return [...out].sort((a,b)=>a-b)}
 // Require approval only for relationships that the trainer offers for evaluation.
 const ROLE=c=>c==='Tops'?'top':(['Pants','Skirts'].includes(c)?'bottom':c==='Shoes'?'shoe':c==='Outerwear'?'outer':c==='Bags'?'bag':c==='Dresses'?'dress':null);
-const TRAINABLE=new Set(['bottom|top','bottom|shoe','bottom|outer','bag|top','bag|outer','bag|dress']);
+const TRAINABLE=new Set(['bottom|top','bottom|shoe','bottom|outer','outer|top','dress|outer','bag|top','bag|outer','bag|dress']);
 function trainerEligible(a,b){const x=ROLE(a.category),y=ROLE(b.category);return !!(x&&y&&TRAINABLE.has([x,y].sort().join('|')))}
 function compatibleSet(items){return items.every((x,i)=>items.slice(i+1).every(y=>(trainerEligible(x,y)?pair(x,y):state.pairs[[x.item_code,y.item_code].sort().join('::')]!==false)))}
 function hasOccasion(g,type){return (g.occasions||[]).some(o=>String(o).trim().toLowerCase()===String(type).trim().toLowerCase())}
@@ -107,33 +107,31 @@ return variants.length?[{id:'all-outfits',variants}]:[];
 }
 const SLOT_ORDER=['top','outer','bottom','shoe','bag'];
 let slotSelection={};
-let anchorRole='bottom';
+let lockedRoles=new Set(['top']);
 let suppressAnchorClick=false;
-let slotSelectionOrder=[];
 let lastClusterKey='';
 function garmentFor(v,role){return v.garments.find(x=>group(x.category)===role||(role==='top'&&group(x.category)==='dress'))||null}
-function filteredVariants(cluster,omit=null){
- return cluster.variants.filter(v=>SLOT_ORDER.every(role=>role===omit||!(role in slotSelection)||(garmentFor(v,role)?.item_code||'')===slotSelection[role]));
+function itemCode(v,role){return garmentFor(v,role)?.item_code||''}
+function matchingLocks(g,omit=null){return g.variants.filter(v=>[...lockedRoles].every(r=>r===omit||!slotSelection[r]||itemCode(v,r)===slotSelection[r]))}
+function optionsForSlot(g,role){return matchingLocks(g,role)}
+function toggleLock(role){
+ const g=build()[ST.cluster];if(!g)return;
+ if(lockedRoles.has(role)){lockedRoles.delete(role);results();return}
+ const code=slotSelection[role]||itemCode(matchingLocks(g)[0]||g.variants[0],role);
+ if(!code)return;
+ if(!matchingLocks(g).some(v=>itemCode(v,role)===code))return;
+ slotSelection[role]=code;lockedRoles.add(role);results();
 }
-function optionsForSlot(cluster,role){return role===anchorRole?cluster.variants:cluster.variants.filter(v=>!slotSelection[anchorRole]||(garmentFor(v,anchorRole)?.item_code||'')===slotSelection[anchorRole]);}
-function setAnchor(role){const g=build()[ST.cluster];if(!g||!g.variants.some(v=>garmentFor(v,role)))return;anchorRole=role;slotSelection={[role]:slotSelection[role]||garmentFor(g.variants.find(v=>garmentFor(v,role)),role).item_code};results();}
 function randomAnchor(){
- const groups=build();
+ const groups=build(),g=groups[ST.cluster];if(!g)return;
  const pool=new Map();
- for(let i=0;i<groups.length;i++)for(const variant of groups[i].variants){
-  for(const role of SLOT_ORDER){
-   const garment=garmentFor(variant,role);
-   if(garment?.item_code&&!pool.has(garment.item_code))pool.set(garment.item_code,{role,code:garment.item_code,group:i});
-  }
+ for(const v of matchingLocks(g))for(const role of SLOT_ORDER){
+  const code=itemCode(v,role);if(code&&!pool.has(code))pool.set(code,{role,code});
  }
- const choices=[...pool.values()];
- if(!choices.length)return;
+ const choices=[...pool.values()];if(!choices.length)return;
  const selected=choices[Math.floor(Math.random()*choices.length)];
- ST.cluster=selected.group;
- lastClusterKey=groups[selected.group].id;
- anchorRole=selected.role;
- slotSelection={[selected.role]:selected.code};
- slotSelectionOrder=[];
+ slotSelection[selected.role]=selected.code;
+ lockedRoles.add(selected.role);
  results();
 }
 function results(){
@@ -142,17 +140,22 @@ function results(){
  ST.cluster=Math.min(ST.cluster,Math.max(0,groups.length-1));
  const g=groups[ST.cluster];
  if(!g){byid('st-outfit').innerHTML='<div class="empty-s">No outfits satisfy all compatibility, activity and temperature requirements.</div>';return}
- if(lastClusterKey!==g.id){lastClusterKey=g.id;slotSelection={};slotSelectionOrder=[];anchorRole='bottom'}
- if(!g.variants.some(v=>garmentFor(v,anchorRole)))anchorRole='top';
- 
- // Reconcile selections after changing another slot, never show invalid combinations.
- let matching=g.variants.filter(v=>!slotSelection[anchorRole]||(garmentFor(v,anchorRole)?.item_code||'')===slotSelection[anchorRole]);
- if(!matching.length){delete slotSelection[anchorRole];matching=g.variants}
- for(const role of SLOT_ORDER){if(role===anchorRole||!(role in slotSelection))continue;const subset=matching.filter(v=>(garmentFor(v,role)?.item_code||'')===slotSelection[role]);if(subset.length)matching=subset;else delete slotSelection[role]}
- if(matching.length)for(const role of SLOT_ORDER)slotSelection[role]=garmentFor(matching[0],role)?.item_code||'';
- const chosen=matching[0];
- // Outdoor comfort envelope: remove the optional coat when warm, add it when cold.
- // Bags do not contribute insulation.
+ if(lastClusterKey!==g.id){
+  lastClusterKey=g.id;slotSelection={};lockedRoles=new Set(['top']);
+ }
+ // Initialize a default top lock, favoring a real top when available.
+ if(lockedRoles.has('top')&&!slotSelection.top){
+  const first=g.variants.find(v=>itemCode(v,'top'));
+  if(first)slotSelection.top=itemCode(first,'top');else lockedRoles.delete('top');
+ }
+ // Weather / activity changes can invalidate a lock. Never silently unlock it.
+ const matching=matchingLocks(g);
+ if(!matching.length){
+  byid('st-outfit').innerHTML='<div class="empty-s">The locked items have no compatible outfit for these conditions. Long-press a yellow item to unlock it.</div>';
+  return;
+ }
+ let chosen=matching.find(v=>SLOT_ORDER.every(role=>!slotSelection[role]||lockedRoles.has(role)||itemCode(v,role)===slotSelection[role]))||matching[0];
+ for(const role of SLOT_ORDER)slotSelection[role]=itemCode(chosen,role);
  const baseGarments=chosen.garments.filter(g=>group(g.category)!=='outer'&&group(g.category)!=='bag');
  const coat=chosen.garments.find(g=>group(g.category)==='outer');
  const baseWarmth=baseGarments.reduce((sum,g)=>sum+warmth(g),0);
@@ -166,27 +169,41 @@ function results(){
   const current=garmentFor(chosen,role),code=current?.item_code||'';
   const index=possible.findIndex(x=>(x?.item_code||'')===code);
   const count=possible.length,canCycle=count>1;
-  return '<div class="stylist-slot'+(role===anchorRole?' anchor-slot':'')+'" data-swipe-role="'+role+'"><div class="slot-head">'+labels[role]+'</div>'+ 
+  const isLocked=lockedRoles.has(role);
+  return '<div class="stylist-slot'+(isLocked?' locked-slot':'')+'" data-swipe-role="'+role+'" aria-label="'+labels[role]+(isLocked?', locked':'')+'"><div class="slot-head">'+labels[role]+'</div>'+
    (current?'<button type="button" class="garment-s" data-st="open-item" data-item-code="'+E(current.item_code)+'" aria-label="View '+E(current.name)+' details"><img src="'+E(getimage(current))+'" alt="'+E(current.name)+'"><div class="name">'+E(current.name)+'</div></button>':'<div class="slot-empty">No '+(role==='bag'?'bag':'jacket')+'</div>')+
-   '<div class="slot-controls"><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="-1" '+(!canCycle?'disabled':'')+' aria-label="Previous '+labels[role]+'">‹</button><small>'+(index+1)+' / '+count+'</small><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="1" '+(!canCycle?'disabled':'')+' aria-label="Next '+labels[role]+'">›</button></div></div>';
+   '<div class="slot-controls"><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="-1" '+(!canCycle?'disabled':'')+' aria-label="Previous '+labels[role]+'">‹</button><small>'+(Math.max(0,index)+1)+' / '+count+'</small><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="1" '+(!canCycle?'disabled':'')+' aria-label="Next '+labels[role]+'">›</button></div></div>';
  }).join('');
- byid('st-outfit').innerHTML='<div class="stylist-slots">'+slots+'</div><p class="slot-foot">'+matching.length+' compatible complete outfit'+(matching.length===1?'':'s')+'</p>';
+ byid('st-outfit').innerHTML='<div class="stylist-slots">'+slots+'</div><p class="slot-foot">'+matching.length+' compatible complete outfit'+(matching.length===1?'':'s')+' · Hold an item to lock / unlock</p>';
  const holder=byid('st-outfit');
- holder.querySelectorAll('[data-swipe-role]').forEach(el=>{let startX=0,startY=0,holdTimer=null,held=false;el.addEventListener('pointerdown',e=>{if(e.target.closest('.slot-controls,.set-anchor'))return;startX=e.clientX;startY=e.clientY;held=false;holdTimer=setTimeout(()=>{held=true;suppressAnchorClick=true;setAnchor(el.dataset.swipeRole)},550)});el.addEventListener('pointermove',e=>{if(Math.abs(e.clientX-startX)>12||Math.abs(e.clientY-startY)>12)clearTimeout(holdTimer)});for(const t of ['pointerup','pointercancel','pointerleave'])el.addEventListener(t,()=>clearTimeout(holdTimer));el.addEventListener('contextmenu',e=>{e.preventDefault();setAnchor(el.dataset.swipeRole)});el.addEventListener('touchstart',e=>{startX=e.touches[0].clientX;startY=e.touches[0].clientY},{passive:true});el.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-startX,dy=e.changedTouches[0].clientY-startY;if(!held&&Math.abs(dx)>35&&Math.abs(dx)>Math.abs(dy)*1.3)cycleSlot(el.dataset.swipeRole,dx<0?1:-1)},{passive:true})});
+ holder.querySelectorAll('[data-swipe-role]').forEach(el=>{
+  let startX=0,startY=0,holdTimer=null,held=false;
+  el.addEventListener('pointerdown',e=>{
+   if(e.target.closest('.slot-controls'))return;
+   startX=e.clientX;startY=e.clientY;held=false;
+   holdTimer=setTimeout(()=>{held=true;suppressAnchorClick=true;toggleLock(el.dataset.swipeRole)},550);
+  });
+  el.addEventListener('pointermove',e=>{if(Math.abs(e.clientX-startX)>12||Math.abs(e.clientY-startY)>12)clearTimeout(holdTimer)});
+  for(const t of ['pointerup','pointercancel','pointerleave'])el.addEventListener(t,()=>clearTimeout(holdTimer));
+  el.addEventListener('contextmenu',e=>{e.preventDefault();if(!held)toggleLock(el.dataset.swipeRole)});
+  el.addEventListener('touchstart',e=>{startX=e.touches[0].clientX;startY=e.touches[0].clientY},{passive:true});
+  el.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-startX,dy=e.changedTouches[0].clientY-startY;if(!held&&Math.abs(dx)>35&&Math.abs(dx)>Math.abs(dy)*1.3)cycleSlot(el.dataset.swipeRole,dx<0?1:-1)},{passive:true});
+ });
 }
 function cycleSlot(role,step){
  const g=build()[ST.cluster];if(!g)return;
- const options=[...new Map(optionsForSlot(g,role).map(v=>{const item=garmentFor(v,role);return [item?.item_code||'',item]})).values()];
+ const variants=optionsForSlot(g,role);
+ const options=[...new Set(variants.map(v=>itemCode(v,role)))];
  if(options.length<2)return;
- const selected=(role in slotSelection)?slotSelection[role]:(garmentFor(filteredVariants(g)[0]||g.variants[0],role)?.item_code||'');
- const index=Math.max(0,options.findIndex(x=>(x?.item_code||'')===selected));
- const item=options[(index+step+options.length)%options.length];
- if(role===anchorRole)slotSelection={[role]:item?.item_code||''};else slotSelection={[anchorRole]:slotSelection[anchorRole],[role]:item?.item_code||''};
- results();return;
- slotSelectionOrder=slotSelectionOrder.filter(k=>k!==role);
- slotSelectionOrder.push(role);
- // Keep earlier choices; remove later choices only if they conflict with this selection.
- if(!filteredVariants(g).length){for(let i=0;i<slotSelectionOrder.length-1;i++){const other=slotSelectionOrder[i];if(other===role)continue;delete slotSelection[other];if(filteredVariants(g).length)break}slotSelectionOrder=slotSelectionOrder.filter(k=>k in slotSelection)}
+ const current=slotSelection[role]||itemCode(variants[0],role);
+ const index=Math.max(0,options.indexOf(current));
+ const code=options[(index+step+options.length)%options.length];
+ slotSelection[role]=code;
+ // If a lock is switched, preserve all other locks; update unlocked slots to a valid outfit.
+ const matches=matchingLocks(g).filter(v=>itemCode(v,role)===code);
+ if(!matches.length)return;
+ const v=matches[0];
+ for(const r of SLOT_ORDER)if(!lockedRoles.has(r))slotSelection[r]=itemCode(v,r);
  results();
 }
 
@@ -195,7 +212,7 @@ async function searchLocation(){let name=byid('st-location')?.value.trim();if(!n
 function detect(){if(!navigator.geolocation){ST.weatherMessage='Location permission unavailable';forecast();return}ST.weatherMessage='Detecting location…';forecast();navigator.geolocation.getCurrentPosition(async p=>{ST.lat=p.coords.latitude;ST.lon=p.coords.longitude;ST.location='Current location';if(byid('st-location'))byid('st-location').value=ST.location;try{let r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${ST.lat}&lon=${ST.lon}&format=json&zoom=10&addressdetails=1`);let j=await r.json();if(j.address){ST.location=[j.address.city||j.address.town||j.address.village||j.address.municipality||j.address.county,j.address.state].filter(Boolean).join(', ');if(byid('st-location'))byid('st-location').value=ST.location}}catch(e){}await getWeather()},()=>{ST.weatherMessage='Location access denied. Search for a city instead.';forecast()},{timeout:12000,maximumAge:600000})}
 window.renderStylist=function(m){if(!ST.dateManual)ST.date=defaultDate();setTitle("Stylist");m.innerHTML=body();schedule();forecast();results();if(!ST.geolocationTried){ST.geolocationTried=true;detect()}};
 document.addEventListener('click',e=>{if(suppressAnchorClick){suppressAnchorClick=false;e.preventDefault();e.stopImmediatePropagation()}},true);
-document.addEventListener('click',e=>{if(state.page!=='stylist')return;const b=e.target.closest('[data-st]');if(!b)return;const act=b.dataset.st;if(act==='open-item'){state.selected=b.dataset.itemCode;state.detailTab='matches';state.page='detail';render();return}if(act==='random-anchor'){randomAnchor();return}if(act==='cycle-slot'){cycleSlot(b.dataset.role,Number(b.dataset.step));return}if(act==='set-anchor'){setAnchor(b.dataset.role);return}if(act==='detect')detect();if(act==='search')searchLocation();if(act==='add'){const end=ST.activities.at(-1)?.end||17;ST.activities.push({type:'Daily',start:Math.max(6,Math.min(23,end)),end:Math.min(24,Math.max(7,end+1))});schedule();results()}if(act==='remove'){if(ST.activities.length>1){ST.activities.splice(+b.dataset.index,1);schedule();results()}}if(act==='vibe'){ST.vibe=b.dataset.vibe;ST.cluster=0;ST.variant=0;schedule();results()}if(act==='family'){ST.cluster=+b.dataset.index;ST.variant=0;slotSelection={};slotSelectionOrder=[];lastClusterKey='';results()}if(act==='previous'||act==='next'){const g=build()[ST.cluster];if(g)ST.variant=(ST.variant+(act==='next'?1:-1)+g.variants.length)%g.variants.length;results()}});
+document.addEventListener('click',e=>{if(state.page!=='stylist')return;const b=e.target.closest('[data-st]');if(!b)return;const act=b.dataset.st;if(act==='open-item'){state.selected=b.dataset.itemCode;state.detailTab='matches';state.page='detail';render();return}if(act==='random-anchor'){randomAnchor();return}if(act==='cycle-slot'){cycleSlot(b.dataset.role,Number(b.dataset.step));return}if(act==='set-anchor'){toggleLock(b.dataset.role);return}if(act==='detect')detect();if(act==='search')searchLocation();if(act==='add'){const end=ST.activities.at(-1)?.end||17;ST.activities.push({type:'Daily',start:Math.max(6,Math.min(23,end)),end:Math.min(24,Math.max(7,end+1))});schedule();results()}if(act==='remove'){if(ST.activities.length>1){ST.activities.splice(+b.dataset.index,1);schedule();results()}}if(act==='vibe'){ST.vibe=b.dataset.vibe;ST.cluster=0;ST.variant=0;schedule();results()}if(act==='family'){ST.cluster=+b.dataset.index;ST.variant=0;slotSelection={};lastClusterKey='';results()}if(act==='previous'||act==='next'){const g=build()[ST.cluster];if(g)ST.variant=(ST.variant+(act==='next'?1:-1)+g.variants.length)%g.variants.length;results()}});
 document.addEventListener('change',e=>{if(state.page!=='stylist')return;const el=e.target;if(el.id==='st-date'){ST.date=el.value||defaultDate();ST.dateManual=true;const label=byid('st-date-label');if(label)label.textContent=dateLabel(ST.date);ST.weatherKey='';getWeather()}if(el.dataset.stActivity!=null){const i=+el.dataset.stActivity;const k=el.dataset.key;ST.activities[i][k]=k==='type'?el.value:+el.value;if(ST.activities[i].end<=ST.activities[i].start){if(k==='start')ST.activities[i].start=ST.activities[i].end-1;else ST.activities[i].end=ST.activities[i].start+1}schedule();results()}});
 document.addEventListener('input',e=>{if(state.page==='stylist'&&e.target.id==='st-location'){clearTimeout(locationTimer);locationTimer=setTimeout(()=>{if(byid('st-location')?.value.trim().length>=3)searchLocation()},600)}});
 document.addEventListener('keydown',e=>{if(state.page==='stylist'&&e.key==='Enter'&&e.target.id==='st-location'){e.preventDefault();clearTimeout(locationTimer);searchLocation()}});
