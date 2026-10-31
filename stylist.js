@@ -171,7 +171,7 @@ function results(){
   const count=possible.length,canCycle=count>1;
   const isLocked=lockedRoles.has(role);
   return '<div class="stylist-slot'+(isLocked?' locked-slot':'')+'" data-swipe-role="'+role+'" aria-label="'+labels[role]+(isLocked?', locked':'')+'"><div class="slot-head">'+labels[role]+'</div>'+
-   (current?'<button type="button" class="garment-s" data-st="open-item" data-item-code="'+E(current.item_code)+'" aria-label="View '+E(current.name)+' details"><img src="'+E(getimage(current))+'" alt="'+E(current.name)+'"><div class="name">'+E(current.name)+'</div></button>':'<div class="slot-empty">No '+(role==='bag'?'bag':'jacket')+'</div>')+
+   (current?'<button type="button" class="garment-s" data-st="open-item" data-item-code="'+E(current.item_code)+'" aria-label="View '+E(current.name)+' details" style="-webkit-touch-callout:none;touch-action:pan-y"><img draggable="false" style="-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;pointer-events:none" src="'+E(getimage(current))+'" alt="'+E(current.name)+'"><div class="name">'+E(current.name)+'</div></button>':'<div class="slot-empty">No '+(role==='bag'?'bag':'jacket')+'</div>')+
    '<div class="slot-controls"><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="-1" '+(!canCycle?'disabled':'')+' aria-label="Previous '+labels[role]+'">‹</button><small>'+(Math.max(0,index)+1)+' / '+count+'</small><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="1" '+(!canCycle?'disabled':'')+' aria-label="Next '+labels[role]+'">›</button></div></div>';
  }).join('');
  byid('st-outfit').innerHTML='<div class="stylist-slots">'+slots+'</div><p class="slot-foot">'+matching.length+' compatible complete outfit'+(matching.length===1?'':'s')+' · Hold an item to lock / unlock</p>';
@@ -185,7 +185,8 @@ function results(){
   });
   el.addEventListener('pointermove',e=>{if(Math.abs(e.clientX-startX)>12||Math.abs(e.clientY-startY)>12)clearTimeout(holdTimer)});
   for(const t of ['pointerup','pointercancel','pointerleave'])el.addEventListener(t,()=>clearTimeout(holdTimer));
-  el.addEventListener('contextmenu',e=>{e.preventDefault();if(!held)toggleLock(el.dataset.swipeRole)});
+  el.addEventListener('contextmenu',e=>{e.preventDefault();if(!held&&e.pointerType==='mouse')toggleLock(el.dataset.swipeRole)});
+  el.addEventListener('dragstart',e=>e.preventDefault());
   el.addEventListener('touchstart',e=>{startX=e.touches[0].clientX;startY=e.touches[0].clientY},{passive:true});
   el.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-startX,dy=e.changedTouches[0].clientY-startY;if(!held&&Math.abs(dx)>35&&Math.abs(dx)>Math.abs(dy)*1.3)cycleSlot(el.dataset.swipeRole,dx<0?1:-1)},{passive:true});
  });
