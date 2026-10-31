@@ -86,9 +86,12 @@ for(const base of bases)for(const shoe of eligibleShoes){
    const warmError=hottest===null?0:Math.abs(hottest+baseTemp-72);
    const coldError=coldest===null?0:Math.abs(coldest+total-72);
    const score=Math.max(0,100-Math.round((warmError+coldError)*2));
-   for(const bag of [null,...by.bag]){
-     if(bag&&!compatibleSet([...garments,bag]))continue;
-     if(bag&&ST.activities.some(a=>!hasOccasion(bag,a.type)))continue;
+   // Use a compatible bag whenever one exists; "No bag" is fallback only.
+   const compatibleBags=by.bag.filter(bag=>
+     compatibleSet([...garments,bag])&&
+     !ST.activities.some(a=>!hasOccasion(bag,a.type))
+   );
+   for(const bag of compatibleBags.length?compatibleBags:[null]){
      variants.push({garments:bag?[...garments,bag]:garments,score,layer});
    }
  }
