@@ -20,7 +20,7 @@ function body(){
   <div class="small" id="st-weather-msg" role="status" style="display:none"></div><div id="st-forecast" class="forecast-s"></div></section>
   <section class="panel-s"><h2>Schedule</h2><div id="st-activities"></div><button class="tiny" data-st="add">+ Add activity</button></section>
 
-  </div><div><section class="panel-s"><div class="line-s"><h2>Outfit</h2><div class="outfit-actions-s"><span class="small" id="st-count"></span><button type="button" class="random-outfit-s" data-st="random-anchor" aria-label="Choose a random eligible garment as anchor">Random</button></div></div><div id="st-outfit"></div></section></div></div></section>`;
+  </div><div><section class="panel-s"><div class="line-s"><h2>Outfit</h2><div class="outfit-actions-s"><span class="small" id="st-count"></span><button type="button" class="random-outfit-s" data-st="clear-locks" aria-label="Unlock all selected garments">Clear locks</button><button type="button" class="random-outfit-s" data-st="random-anchor" aria-label="Choose a random eligible garment as anchor">Random</button></div></div><div id="st-outfit"></div></section></div></div></section>`;
 }
 function weatherTheme(w){if(!w)return 'neutral';if([95,96,99].includes(w.code))return 'storm';if(w.snow>0||[71,73,75,77,85,86].includes(w.code))return 'snow';if([51,53,55,61,63,65,80,81,82].includes(w.code)||w.rain>=70)return 'rain';if([0,1].includes(w.code))return 'sunny';if(w.code===2)return 'partly';return 'cloudy'}
 function forecast(){const slot=byid('st-forecast');if(!slot)return;slot.innerHTML=ST.weather?[8,12,16,20].map(h=>{const w=ST.weather[h];return `<div class="weather-card-s weather-${weatherTheme(w)}"><span class="weather-art-s" aria-hidden="true"></span><small>${time(h)}</small><b>${w?Math.round(w.temp)+'°':'—'}</b>${w?`<small>${Math.round(w.rain)}% rain</small>`:''}</div>`}).join(''):'';const msg=byid('st-weather-msg');if(msg){msg.textContent=ST.weatherMessage;msg.style.display=ST.weather||!ST.weatherMessage?'none':'block';}}
@@ -110,6 +110,9 @@ let slotSelection={};
 let lockedRoles=new Set(['top']);
 let suppressAnchorClick=false;
 let lastClusterKey='';
+let lastConditionsKey=null;
+function clearAllLocks(){lockedRoles.clear();slotSelection={};}
+function conditionsKey(){return JSON.stringify({activities:ST.activities.map(a=>[a.type,a.start,a.end]),date:ST.date,location:ST.location,weather:ST.weather});}
 function garmentFor(v,role){return v.garments.find(x=>group(x.category)===role||(role==='top'&&group(x.category)==='dress'))||null}
 function itemCode(v,role){return garmentFor(v,role)?.item_code||''}
 function matchingLocks(g,omit=null){return g.variants.filter(v=>[...lockedRoles].every(r=>r===omit||!slotSelection[r]||itemCode(v,r)===slotSelection[r]))}
@@ -136,24 +139,26 @@ function randomAnchor(){
 }
 function results(){
  if(!byid('st-outfit'))return;
+ const nextConditionsKey=conditionsKey();
+ if(lastConditionsKey!==null&&nextConditionsKey!==lastConditionsKey){clearAllLocks();lastClusterKey='';}
+ lastConditionsKey=nextConditionsKey;
  const groups=build();byid('st-count').textContent='';
  ST.cluster=Math.min(ST.cluster,Math.max(0,groups.length-1));
  const g=groups[ST.cluster];
  if(!g){byid('st-outfit').innerHTML='<div class="empty-s">No outfits satisfy all compatibility, activity and temperature requirements.</div>';return}
  if(lastClusterKey!==g.id){
-  lastClusterKey=g.id;slotSelection={};lockedRoles=new Set(['top']);
+  lastClusterKey=g.id;
+  // Preserve unlocked state after changing conditions or using Clear locks.
+  slotSelection={};
  }
  // Initialize a default top lock, favoring a real top when available.
  if(lockedRoles.has('top')&&!slotSelection.top){
   const first=g.variants.find(v=>itemCode(v,'top'));
   if(first)slotSelection.top=itemCode(first,'top');else lockedRoles.delete('top');
  }
- // Weather / activity changes can invalidate a lock. Never silently unlock it.
- const matching=matchingLocks(g);
- if(!matching.length){
-  byid('st-outfit').innerHTML='<div class="empty-s">The locked items have no compatible outfit for these conditions. Long-press a yellow item to unlock it.</div>';
-  return;
- }
+ // If a lock has become impossible (e.g. data changed), recover without trapping the user.
+ let matching=matchingLocks(g);
+ if(!matching.length){clearAllLocks();matching=g.variants;}
  let chosen=matching.find(v=>SLOT_ORDER.every(role=>!slotSelection[role]||lockedRoles.has(role)||itemCode(v,role)===slotSelection[role]))||matching[0];
  for(const role of SLOT_ORDER)slotSelection[role]=itemCode(chosen,role);
  const baseGarments=chosen.garments.filter(g=>group(g.category)!=='outer'&&group(g.category)!=='bag');
@@ -213,7 +218,7 @@ async function searchLocation(){let name=byid('st-location')?.value.trim();if(!n
 function detect(){if(!navigator.geolocation){ST.weatherMessage='Location permission unavailable';forecast();return}ST.weatherMessage='Detecting location…';forecast();navigator.geolocation.getCurrentPosition(async p=>{ST.lat=p.coords.latitude;ST.lon=p.coords.longitude;ST.location='Current location';if(byid('st-location'))byid('st-location').value=ST.location;try{let r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${ST.lat}&lon=${ST.lon}&format=json&zoom=10&addressdetails=1`);let j=await r.json();if(j.address){ST.location=[j.address.city||j.address.town||j.address.village||j.address.municipality||j.address.county,j.address.state].filter(Boolean).join(', ');if(byid('st-location'))byid('st-location').value=ST.location}}catch(e){}await getWeather()},()=>{ST.weatherMessage='Location access denied. Search for a city instead.';forecast()},{timeout:12000,maximumAge:600000})}
 window.renderStylist=function(m){if(!ST.dateManual)ST.date=defaultDate();setTitle("Stylist");m.innerHTML=body();schedule();forecast();results();if(!ST.geolocationTried){ST.geolocationTried=true;detect()}};
 document.addEventListener('click',e=>{if(suppressAnchorClick){suppressAnchorClick=false;e.preventDefault();e.stopImmediatePropagation()}},true);
-document.addEventListener('click',e=>{if(state.page!=='stylist')return;const b=e.target.closest('[data-st]');if(!b)return;const act=b.dataset.st;if(act==='open-item'){state.selected=b.dataset.itemCode;state.detailTab='matches';state.page='detail';render();return}if(act==='random-anchor'){randomAnchor();return}if(act==='cycle-slot'){cycleSlot(b.dataset.role,Number(b.dataset.step));return}if(act==='set-anchor'){toggleLock(b.dataset.role);return}if(act==='detect')detect();if(act==='search')searchLocation();if(act==='add'){const end=ST.activities.at(-1)?.end||17;ST.activities.push({type:'Daily',start:Math.max(6,Math.min(23,end)),end:Math.min(24,Math.max(7,end+1))});schedule();results()}if(act==='remove'){if(ST.activities.length>1){ST.activities.splice(+b.dataset.index,1);schedule();results()}}if(act==='vibe'){ST.vibe=b.dataset.vibe;ST.cluster=0;ST.variant=0;schedule();results()}if(act==='family'){ST.cluster=+b.dataset.index;ST.variant=0;slotSelection={};lastClusterKey='';results()}if(act==='previous'||act==='next'){const g=build()[ST.cluster];if(g)ST.variant=(ST.variant+(act==='next'?1:-1)+g.variants.length)%g.variants.length;results()}});
+document.addEventListener('click',e=>{if(state.page!=='stylist')return;const b=e.target.closest('[data-st]');if(!b)return;const act=b.dataset.st;if(act==='open-item'){state.selected=b.dataset.itemCode;state.detailTab='matches';state.page='detail';render();return}if(act==='random-anchor'){randomAnchor();return}if(act==='clear-locks'){clearAllLocks();results();return}if(act==='cycle-slot'){cycleSlot(b.dataset.role,Number(b.dataset.step));return}if(act==='set-anchor'){toggleLock(b.dataset.role);return}if(act==='detect')detect();if(act==='search')searchLocation();if(act==='add'){const end=ST.activities.at(-1)?.end||17;ST.activities.push({type:'Daily',start:Math.max(6,Math.min(23,end)),end:Math.min(24,Math.max(7,end+1))});schedule();results()}if(act==='remove'){if(ST.activities.length>1){ST.activities.splice(+b.dataset.index,1);schedule();results()}}if(act==='vibe'){ST.vibe=b.dataset.vibe;ST.cluster=0;ST.variant=0;schedule();results()}if(act==='family'){ST.cluster=+b.dataset.index;ST.variant=0;slotSelection={};lastClusterKey='';results()}if(act==='previous'||act==='next'){const g=build()[ST.cluster];if(g)ST.variant=(ST.variant+(act==='next'?1:-1)+g.variants.length)%g.variants.length;results()}});
 document.addEventListener('change',e=>{if(state.page!=='stylist')return;const el=e.target;if(el.id==='st-date'){ST.date=el.value||defaultDate();ST.dateManual=true;const label=byid('st-date-label');if(label)label.textContent=dateLabel(ST.date);ST.weatherKey='';getWeather()}if(el.dataset.stActivity!=null){const i=+el.dataset.stActivity;const k=el.dataset.key;ST.activities[i][k]=k==='type'?el.value:+el.value;if(ST.activities[i].end<=ST.activities[i].start){if(k==='start')ST.activities[i].start=ST.activities[i].end-1;else ST.activities[i].end=ST.activities[i].start+1}schedule();results()}});
 document.addEventListener('input',e=>{if(state.page==='stylist'&&e.target.id==='st-location'){clearTimeout(locationTimer);locationTimer=setTimeout(()=>{if(byid('st-location')?.value.trim().length>=3)searchLocation()},600)}});
 document.addEventListener('keydown',e=>{if(state.page==='stylist'&&e.key==='Enter'&&e.target.id==='st-location'){e.preventDefault();clearTimeout(locationTimer);searchLocation()}});
