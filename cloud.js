@@ -76,6 +76,22 @@ async function drain(){
   finally{cloud.saving=false;if(cloud.queued){clearTimeout(timer);timer=setTimeout(()=>void drain(),5000);}}
 }
 
+// Clean-out rotation uses a dedicated owner-protected Supabase record.
+window.loadCleanoutCloud=async function(){
+ const sb=getClient(),{data:{user},error:authError}=await sb.auth.getUser();
+ if(authError)throw authError;
+ if(!user)return null;
+ const {data,error}=await sb.from('closet_cleanout').select('rotation').eq('owner_id',user.id).maybeSingle();
+ if(error)throw error;
+ return data?.rotation||null;
+};
+window.saveCleanoutCloud=async function(rotation){
+ const sb=getClient(),{data:{user},error:authError}=await sb.auth.getUser();
+ if(authError)throw authError;
+ if(!user)throw Error('Sign in to synchronize closet cleanout.');
+ const {error}=await sb.from('closet_cleanout').upsert({owner_id:user.id,rotation,updated_at:new Date().toISOString()},{onConflict:'owner_id'});
+ if(error)throw error;
+};
 const original=renderSettings;
 renderSettings=function(m){original(m);let c=config();m.insertAdjacentHTML('beforeend',`<section class="page" style="border-top:1px solid #ddd"><h2>Supabase connection</h2><p class="hint">Use the project URL and publishable/anon key (never a service-role or secret key). Sign in before syncing. After loading cloud data, edits and pair decisions sync automatically.</p><div class="field"><label>Project URL</label><input id="cloudurl" placeholder="https://example.supabase.co" value="${esc(c.url||'')}"></div><div class="field"><label>Publishable / anon key</label><input id="cloudkey" placeholder="sb_publishable_… or legacy anon key" value="${esc(c.key||'')}"></div><button class="secondary" id="cloudsave">Save connection settings</button><div class="field"><label>Email</label><input id="cloudemail" type="email" autocomplete="email"></div><div class="field"><label>Password (minimum 6 characters)</label><input id="cloudpassword" type="password" autocomplete="current-password"></div><div class="toolbar"><button class="secondary" id="cloudsignup">Create account</button><button class="primary" id="cloudlogin">Sign in</button><button class="secondary" id="cloudlogout">Sign out</button></div><div class="toolbar"><button class="primary" id="cloudupload">Upload this wardrobe</button><button class="secondary" id="cloudload">Load cloud data</button></div><p id="cloudmsg" class="hint">${cloud.user?'Signed in: '+esc(cloud.user.email):'Not signed in on this page.'}</p><p class="note">Caution: “Load cloud data” replaces current browser items and decisions; export a JSON backup first. Garment images remain publicly accessible to anyone with their image URL.</p></section>`)};
 document.addEventListener('click',async e=>{const id=e.target.closest('button')?.id;if(!id?.startsWith('cloud'))return;try{if(id==='cloudsave'){let url=document.getElementById('cloudurl').value.trim().replace(/\/$/,'');let key=document.getElementById('cloudkey').value.trim();if(!/^https:\/\/.+\.supabase\.co$/.test(url)||!key)throw Error('Enter a valid Supabase project URL and key.');localStorage.setItem(CFGKEY,JSON.stringify({url,key}));cloud.client=null;message('Connection settings saved.');}else if(id==='cloudlogin')await login();else if(id==='cloudsignup')await signup();else if(id==='cloudlogout'){await getClient().auth.signOut();cloud.user=null;cloud.ready=false;localStorage.removeItem('wardrobe-sync-user');message('Signed out.');}else if(id==='cloudupload')await uploadAll();else if(id==='cloudload'){if(confirm('Replace local wardrobe with Supabase records? Export backup first.'))await loadAll()}}catch(err){message('Error: '+err.message)}});
