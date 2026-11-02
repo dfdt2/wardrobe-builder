@@ -239,13 +239,69 @@ function renderTrainer(m){
  m.innerHTML=`<section class="page"><div class="toolbar"><select id="traincat1" class="pill">${types().map(t=>`<option ${state.trainerTypes[0]===t?'selected':''}>${esc(t)}</option>`).join('')}</select><span style="align-self:center;color:#aaa">×</span><select id="traincat2" class="pill">${types().map(t=>`<option ${state.trainerTypes[1]===t?'selected':''}>${esc(t)}</option>`).join('')}</select></div><div class="progress"><div style="width:${all.length?done/all.length*100:0}%"></div></div><p class="note">${done} of ${all.length} reviewed · ${pending.length} remaining</p>${curr?`<div class="trainerpair">${curr.map(x=>`<button type="button" class="paircard" data-trainer-item="${esc(x.item_code)}" aria-label="View and edit ${esc(x.name)} details" style="width:100%;color:inherit;font:inherit"><img src="${esc(image(x))}" alt="${esc(x.name)}"><strong>${esc(x.name)}</strong><small>${esc(x.brand||'No brand')}</small></button>`).join('')}</div><div class="actions"><button class="secondary" id="trainerBack" ${!trainerHistory.length||trainerHistoryPosition===0?'disabled':''}>← Back</button><button class="no" data-decision="no">✕ No</button><button data-decision="skip">Skip →</button><button class="yes" data-decision="yes">✓ Yes</button></div>${revisiting?'<p class="note" style="text-align:center">Reviewing an earlier pair — select Yes or No to update it.</p>':''}`:`<div class="empty"><h3>All caught up</h3><p>All eligible comparisons are reviewed.</p><button class="secondary" id="trainerBack" ${!trainerHistory.length?'disabled':''}>← Back</button></div>`}</section>`;
 }
 function networkGarmentRatings(){
- const rows=new Map(state.items.map(item=>[item.item_code,{item,total:0,evaluated:0,yes:0}]));
+ const items=state.items,n=items.length,ids=new Map(items.map((x,i)=>[x.item_code,i]));
+ const adj=Array.from({length:n},()=>new Set()),totals=new Uint32Array(n),evaluated=new Uint32Array(n);
  for(const [a,b] of allPairs()){
-  const decision=state.pairs[pairKey(a.item_code,b.item_code)];
-  for(const item of [a,b]){const r=rows.get(item.item_code);r.total++;if(decision===true||decision===false){r.evaluated++;if(decision===true)r.yes++;}}
+  const i=ids.get(a.item_code),j=ids.get(b.item_code);if(i==null||j==null)continue;
+  totals[i]++;totals[j]++;
+  const result=state.pairs[pairKey(a.item_code,b.item_code)];
+  if(result===true||result===false){evaluated[i]++;evaluated[j]++}
+  if(result===true){adj[i].add(j);adj[j].add(i)}
  }
- return [...rows.values()].map(r=>{const coverage=r.total?r.evaluated/r.total:0,approval=r.evaluated?r.yes/r.evaluated:0,reach=r.total?r.yes/r.total:0;
- return {...r,coverage,approval,reach,eligible:r.total>0&&coverage>.8,score:approval+reach?2*approval*reach/(approval+reach):0};
+ const degree=adj.map(s=>s.size);
+ // PageRank with undirected compatibility edges and explicit dangling-node redistribution.
+ let pr=Array(n).fill(n?1/n:0);
+ for(let t=0;t<60&&n;t++){
+  const next=Array(n).fill(.15/n);
+  let dangling=0;for(let i=0;i<n;i++)if(!degree[i])dangling+=pr[i];
+  for(let i=0;i<n;i++){
+   next[i]+=.85*dangling/n;
+   if(!degree[i])continue;
+   const value=.85*pr[i]/degree[i];for(const j of adj[i])next[j]+=value;
+  }
+  const diff=next.reduce((a,v,i)=>a+Math.abs(v-pr[i]),0);pr=next;if(diff<1e-9)break;
+ }
+ // Brandes shortest-path betweenness for an undirected, unweighted graph.
+ const between=Array(n).fill(0);
+ for(let root=0;root<n;root++){
+  const stack=[],pred=Array.from({length:n},()=>[]),distance=new Int32Array(n).fill(-1),sigma=Array(n).fill(0),queue=[root];
+  distance[root]=0;sigma[root]=1;
+  for(let q=0;q<queue.length;q++){
+   const v=queue[q];stack.push(v);
+   for(const w of adj[v]){
+    if(distance[w]<0){distance[w]=distance[v]+1;queue.push(w)}
+    if(distance[w]===distance[v]+1){sigma[w]+=sigma[v];pred[w].push(v)}
+   }
+  }
+  const delta=Array(n).fill(0);
+  while(stack.length){
+   const w=stack.pop();
+   for(const v of pred[w])delta[v]+=(sigma[v]/sigma[w])*(1+delta[w]);
+   if(w!==root)between[w]+=delta[w];
+  }
+ }
+ for(let i=0;i<n;i++)between[i]/=2;
+ // Core decomposition: iterative peeling by smallest current residual degree.
+ const residual=degree.slice(),removed=new Uint8Array(n),core=Array(n).fill(0);
+ let remaining=n,current=0;
+ while(remaining){
+  let best=-1;for(let i=0;i<n;i++)if(!removed[i]&&(best<0||residual[i]<residual[best]))best=i;
+  current=Math.max(current,residual[best]);core[best]=current;removed[best]=1;remaining--;
+  for(const v of adj[best])if(!removed[v]&&residual[v]>current)residual[v]--;
+ }
+ // Smoothed percentile ranks prevent the harmonic mean from collapsing to zero
+ // for garments that have no bridge role, while preserving metric ordering.
+ function percentiles(values){
+  const sorted=[...new Set(values)].sort((a,b)=>a-b),index=new Map(sorted.map((v,i)=>[v,i]));
+  return values.map(v=>sorted.length<=1?1:.05+.95*index.get(v)/(sorted.length-1));
+ }
+ const scaled=[degree,pr,between,core].map(percentiles);
+ return items.map((item,i)=>{
+  const coverage=totals[i]?evaluated[i]/totals[i]:0;
+  const v=scaled.map(a=>a[i]);
+  const score=4/v.reduce((sum,x)=>sum+1/x,0);
+  return {item,total:totals[i],evaluated:evaluated[i],coverage,eligible:totals[i]>0&&coverage>.8,
+   degree:degree[i],pagerank:pr[i],betweenness:between[i],kcore:core[i],score};
  }).sort((a,b)=>Number(b.eligible)-Number(a.eligible)||b.score-a.score||b.coverage-a.coverage);
 }
 function renderNetwork(m){
@@ -308,7 +364,7 @@ function renderNetwork(m){
  const nodeMarkup=items.map((x,i)=>'<g class="net-node" data-net-index="'+i+'" tabindex="0" role="button" aria-label="'+esc(x.name)+'" transform="translate('+pts[i].x.toFixed(1)+' '+pts[i].y.toFixed(1)+')"><circle r="28" fill="#fff" stroke="#d4d6d9" stroke-width="1.5"/><image href="'+esc(image(x))+'" x="-24" y="-24" width="48" height="48" preserveAspectRatio="xMidYMid meet"/></g>').join('');
  const controls='<div class="toprow wardrobe-controls"><button class="filter-trigger" id="togglefilters" aria-label="Filters" aria-expanded="'+!!state.filtersOpen+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.5" fill="white"/><circle cx="16" cy="17" r="2.5" fill="white"/></svg></button></div>';
  const ratings=networkGarmentRatings(),ranked=ratings.filter(r=>r.eligible),shown=ranked.filter(r=>passesFilters(r.item,networkFilters)&&image(r.item));
- const ratingMarkup='<section class="network-ratings"><div class="network-ratings-head"><h3>Garment ratings</h3><span>'+ranked.length+' ranked</span></div><p>Requires more than 80% of possible trainer comparisons evaluated. Score: harmonic mean of approval rate (Yes / evaluated) and compatibility reach (Yes / possible).</p>'+(shown.length?'<div class="network-rating-list">'+shown.map(r=>'<button type="button" class="network-rating-item" data-rating-item="'+esc(r.item.item_code)+'"><img src="'+esc(image(r.item))+'" alt=""><span class="network-rating-name"><strong>'+esc(r.item.name||r.item.brand||r.item.category)+'</strong><small>'+r.evaluated+'/'+r.total+' reviewed · '+Math.round(r.coverage*100)+'% coverage</small></span><span class="network-rating-score">'+Math.round(r.score*100)+'/100</span></button>').join('')+'</div>':'<div class="network-rating-empty">No garments meet the evaluation threshold for these filters.</div>')+'</section>';
+ const ratingMarkup='<section class="network-ratings"><div class="network-ratings-head"><h3>Garment graph rankings</h3><span>'+ranked.length+' ranked</span></div><p>Only garments with >80% of eligible comparisons evaluated. Combined rating is the harmonic mean of smoothed percentile ranks for degree, PageRank, betweenness and k-core, each weighted equally. Computed from approved compatibility links.</p>'+(shown.length?'<div class="network-rating-list">'+shown.map(r=>'<button type="button" class="network-rating-item" data-rating-item="'+esc(r.item.item_code)+'"><img src="'+esc(image(r.item))+'" alt=""><span class="network-rating-name"><strong>'+esc(r.item.name||r.item.brand||r.item.category)+'</strong><small>'+r.evaluated+'/'+r.total+' reviewed ('+Math.round(r.coverage*100)+'%)</small><small>Degree '+r.degree+' · PageRank '+(r.pagerank*100).toFixed(2)+'% · Betweenness '+r.betweenness.toFixed(1)+' · K-core '+r.kcore+'</small></span><span class="network-rating-score">'+Math.round(r.score*100)+'/100</span></button>').join('')+'</div>':'<div class="network-rating-empty">No garments meet the >80% evaluation threshold with these filters.</div>')+'</section>';
  m.innerHTML=controls+(state.filtersOpen?filterSheet():'')+'<div class="net-screen"><svg viewBox="0 0 '+canvasW+' '+canvasH+'" aria-label="Wardrobe compatibility network"><g class="net-clusters">'+hullMarkup+'</g><g class="net-links">'+edgeMarkup+'</g><g class="net-points">'+nodeMarkup+'</g></svg><button class="net-clear" type="button" hidden>Clear selection</button><button class="net-reset" type="button">Reset view</button></div>'+ratingMarkup;
  m.querySelector('.network-ratings')?.addEventListener('click',e=>{const button=e.target.closest('[data-rating-item]');if(button)openItemDetail(button.dataset.ratingItem,'wardrobe')});
  const screen=m.querySelector('.net-screen'),svg=screen.querySelector('svg'),clear=screen.querySelector('.net-clear');
