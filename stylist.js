@@ -32,16 +32,16 @@ function forecast(){
   if(!points.length){slot.innerHTML='';}
   else{
    const low=points.reduce((a,b)=>b.temp<a.temp?b:a),high=points.reduce((a,b)=>b.temp>a.temp?b:a);
-   const W=670,H=265,L=24,R=42,T=44,B=45, ymin=Math.floor((low.temp-6)/5)*5,ymax=Math.ceil((high.temp+6)/5)*5;
+   const W=670,H=345,L=34,R=49,T=50,B=48, ymin=Math.floor((low.temp-6)/5)*5,ymax=Math.ceil((high.temp+6)/5)*5;
    const x=h=>L+h/23*(W-L-R),y=t=>T+(ymax-t)/(ymax-ymin)*(H-T-B);
    const coords=points.map(p=>[x(p.h),y(p.temp)]);
    const line=coords.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
    const area=line+' L '+coords[coords.length-1][0].toFixed(1)+' '+(H-B)+' L '+coords[0][0].toFixed(1)+' '+(H-B)+' Z';
    const ticks=[0,6,12,18,23];
-   const guide=[0,1,2,3,4].map(i=>{let t=ymin+i*(ymax-ymin)/4;return '<line x1="'+L+'" y1="'+y(t)+'" x2="'+(W-R)+'" y2="'+y(t)+'" stroke="#e8edf0"/><text x="'+(W-5)+'" y="'+(y(t)+4)+'" fill="#858e99" text-anchor="end" font-size="11">'+Math.round(t)+'°</text>'}).join('');
-   const icons=[0,3,6,9,12,15,18,21,23].map(h=>{const p=points.find(q=>q.h===h);return p?'<text x="'+x(h)+'" y="24" text-anchor="middle" font-size="21" fill="#4b647d">'+weatherSymbol(p.w,h)+'</text>':''}).join('');
-   const marks=ticks.map(h=>'<text x="'+x(h)+'" y="'+(H-17)+'" text-anchor="middle" font-size="12" fill="#78818a">'+(h===0?'12 AM':h===23?'11 PM':time(h))+'</text>').join('');
-   const extrema=[low,high].filter((p,i,a)=>i===0||p.h!==a[0].h).map(p=>{const xx=x(p.h),yy=y(p.temp),isHigh=p===high;const ly=yy<72?yy+23:yy-15;return '<circle cx="'+xx+'" cy="'+yy+'" r="5.5" fill="#fff" stroke="'+(isHigh?'#d5a82b':'#53adc7')+'" stroke-width="3"/><text x="'+xx+'" y="'+ly+'" text-anchor="middle" font-weight="700" font-size="15" fill="#223248">'+Math.round(p.temp)+'°</text>'}).join('');
+   const guide=Array.from({length:9},(_,i)=>i).map(i=>{let t=ymin+i*(ymax-ymin)/8;return '<line x1="'+L+'" y1="'+y(t)+'" x2="'+(W-R)+'" y2="'+y(t)+'" stroke="#dce5e9" stroke-width="1.1"/><text x="'+(W-5)+'" y="'+(y(t)+4)+'" fill="#858e99" text-anchor="end" font-size="15">'+Math.round(t)+'°</text>'}).join('');
+   const icons=[0,3,6,9,12,15,18,21,23].map(h=>{const p=points.find(q=>q.h===h);return p?'<text x="'+x(h)+'" y="24" text-anchor="middle" font-size="24" fill="#4b647d">'+weatherSymbol(p.w,h)+'</text>':''}).join('');
+   const marks=ticks.map(h=>'<text x="'+x(h)+'" y="'+(H-17)+'" text-anchor="middle" font-size="16" fill="#78818a">'+(h===0?'12 AM':h===23?'11 PM':time(h))+'</text>').join('');
+   const extrema=[low,high].filter((p,i,a)=>i===0||p.h!==a[0].h).map(p=>{const xx=x(p.h),yy=y(p.temp),isHigh=p===high;const ly=yy<83?yy+28:yy-19;return '<circle cx="'+xx+'" cy="'+yy+'" r="5.5" fill="#fff" stroke="'+(isHigh?'#d5a82b':'#53adc7')+'" stroke-width="3"/><text x="'+xx+'" y="'+ly+'" text-anchor="middle" font-weight="700" font-size="21" fill="#223248">'+Math.round(p.temp)+'°</text>'}).join('');
    slot.innerHTML='<div class="weather-graph-s"><svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Hourly temperature from midnight to 11 PM, low '+Math.round(low.temp)+' degrees at '+time(low.h)+', high '+Math.round(high.temp)+' degrees at '+time(high.h)+'"><defs><linearGradient id="st-area-grad" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffe5a0" stop-opacity=".65"/><stop offset="1" stop-color="#9adce5" stop-opacity=".12"/></linearGradient><linearGradient id="st-line-grad" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#50bad1"/><stop offset=".55" stop-color="#e3bb40"/><stop offset="1" stop-color="#65c0bb"/></linearGradient></defs>'+guide+icons+'<path d="'+area+'" fill="url(#st-area-grad)"/><path d="'+line+'" stroke="url(#st-line-grad)" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" fill="none"/>'+extrema+marks+'</svg></div>';
   }
  }
