@@ -1,7 +1,7 @@
 /* Integrated stylist: uses Builder state.items / state.pairs, not demo approvals. */
 (()=>{
 let locationTimer;
-const TYPES=['Work','Daily','Date','Business','Home','Party','Sport','Special'];
+const TYPES=['Work','Daily','Date','Business','Home','Party','Sport','Dressy','Specialty'];
 const VIBES=['Casual','Minimal','Polished','Sporty','Romantic','Edgy'];
 const iso=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
 const defaultDate=()=>{const d=new Date();if(d.getHours()>=21)d.setDate(d.getDate()+1);return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
