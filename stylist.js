@@ -61,6 +61,11 @@ function group(name){const n=String(name||'').toLowerCase();if(n==='tops'||n==='
 function accessoryRole(g){if(g.category!=='Other')return null;return ({Hats:'hat',Scarves:'scarf',Gloves:'gloves'})[g.subcategory]||null}
 function roleOf(g){return accessoryRole(g)||group(g.category)}
 function warmth(g){return estimatedClo(g)*25} // °F contribution is a heuristic, not a physical conversion
+// The 72°F target already assumes ordinary indoor clothing. The garment-specific
+// warmth values are relative adjustments, not insulation above bare skin.
+// Calibrated reference = 0.32 clo (8°F in this app's heuristic scale).
+const BASELINE_CLO_F=8;
+function effectiveWarmth(raw){return raw-BASELINE_CLO_F}
 function scheduleHours(){const out=new Set();for(const a of ST.activities)for(let h=a.start;h<a.end;h++)out.add(h);return [...out].sort((a,b)=>a-b)}
 // Require approval only for relationships that the trainer offers for evaluation.
 const ROLE=(c,g)=>g?roleOf(g):(c==='Tops'?'top':(['Pants','Skirts'].includes(c)?'bottom':c==='Shoes'?'shoe':c==='Outerwear'?'outer':c==='Bags'?'bag':c==='Dresses'?'dress':null);
@@ -104,7 +109,7 @@ for(const base of bases)for(const shoe of eligibleShoes){
  // Every scheduled activity must be represented by at least one garment occasion.
  // Every required garment must carry every scheduled activity label.
  if(ST.activities.some(a=>required.some(g=>!hasOccasion(g,a.type))))continue;
- const baseTemp=required.reduce((t,g)=>t+warmth(g),0);
+ const baseTemp=effectiveWarmth(required.reduce((t,g)=>t+warmth(g),0));
  // The complete base outfit must be comfortable at the warmest scheduled hour.
  // A removable outer layer can then be included for the coldest hour.
  if(!homeOnly&&hottest!==null&&Math.abs(hottest+baseTemp-72)>5)continue;
@@ -222,8 +227,9 @@ function results(){
  const baseGarments=chosen.garments.filter(g=>!['outer','bag','hat','scarf','gloves'].includes(roleOf(g)));
  const coat=chosen.garments.find(g=>group(g.category)==='outer');
  const baseWarmth=baseGarments.reduce((sum,g)=>sum+warmth(g),0);
- const layeredWarmth=baseWarmth+(coat?warmth(coat):0);
- const low=Math.round(67-layeredWarmth),high=Math.round(77-baseWarmth);
+ const layeredWarmth=baseWarmth+(coat?warmth(coat):0)-BASELINE_CLO_F;
+ const adjustedBaseWarmth=baseWarmth-BASELINE_CLO_F;
+ const low=Math.round(67-layeredWarmth),high=Math.round(77-adjustedBaseWarmth);
  byid('st-count').textContent='Comfort: '+low+'–'+high+'°F';
  byid('st-count').title='Estimated outdoor comfort range, using optional outerwear at colder temperatures (72°F target ±5°F).';
  const labels={top:'Top / dress',outer:'Jacket',bottom:'Pants / skirt',shoe:'Shoes',bag:'Bag',hat:'Hat',scarf:'Scarf',gloves:'Gloves'};
