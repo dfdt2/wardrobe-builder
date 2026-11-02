@@ -63,7 +63,7 @@ function scheduleHours(){const out=new Set();for(const a of ST.activities)for(le
 // Require approval only for relationships that the trainer offers for evaluation.
 const ROLE=c=>c==='Tops'?'top':(['Pants','Skirts'].includes(c)?'bottom':c==='Shoes'?'shoe':c==='Outerwear'?'outer':c==='Bags'?'bag':c==='Dresses'?'dress':null);
 const TRAINABLE=new Set(['bottom|top','bottom|shoe','bottom|outer','outer|top','dress|outer','bag|top','bag|outer','bag|dress']);
-function trainerEligible(a,b){const x=ROLE(a.category),y=ROLE(b.category);return !!(x&&y&&TRAINABLE.has([x,y].sort().join('|')))}
+function trainerEligible(a,b){const x=ROLE(a.category),y=ROLE(b.category);return !!(x&&y&&!hasOccasion(a,'Specialty')&&!hasOccasion(b,'Specialty')&&TRAINABLE.has([x,y].sort().join('|')))}
 function compatibleSet(items){return items.every((x,i)=>items.slice(i+1).every(y=>(trainerEligible(x,y)?pair(x,y):state.pairs[[x.item_code,y.item_code].sort().join('::')]!==false)))}
 function hasOccasion(g,type){return (g.occasions||[]).some(o=>String(o).trim().toLowerCase()===String(type).trim().toLowerCase())}
 // A complete base outfit is either top + pants/skirt + shoes, or dress + shoes.
