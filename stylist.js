@@ -77,10 +77,18 @@ function validBaseOutfit(items){
 function build(){
 const by={top:[],bottom:[],shoe:[],outer:[],dress:[],bag:[]};
 for(const x of state.items){let role=group(x.category);if(role)by[role].push(x)}
-const hours=scheduleHours(),temps=hours.map(h=>ST.weather?.[h]?.temp).filter(Number.isFinite);
+// Indoor Home is seasonally tempered, never filtered against outdoor weather.
+const month=Number(ST.date.slice(5,7));
+const indoorTemp=month===12||month<=2?65:month>=6&&month<=8?75:70;
+const homeOnly=ST.activities.length>0&&ST.activities.every(a=>a.type==='Home');
+const hours=scheduleHours();
+const temps=hours.map(h=>{
+ const active=ST.activities.filter(a=>h>=a.start&&h<a.end);
+ return active.length&&active.every(a=>a.type==='Home')?indoorTemp:ST.weather?.[h]?.temp;
+}).filter(Number.isFinite);
 const hottest=temps.length?Math.max(...temps):null,coldest=temps.length?Math.min(...temps):null;
 // Exclude open-toed footwear if any scheduled hour is colder than 60°F.
-const excludeOpenToe=temps.some(t=>t<60);
+const excludeOpenToe=!homeOnly&&hours.some(h=>ST.activities.some(a=>a.type!=='Home'&&h>=a.start&&h<a.end)&&ST.weather?.[h]?.temp<60);
 const eligibleShoes=by.shoe.filter(shoe=>!excludeOpenToe||!['sandals','sandal heels'].includes(String(shoe.subcategory||'').trim().toLowerCase()));
 const categoryRank=x=>x.category==='Dresses'?0:1;
 let candidates=[];
@@ -96,7 +104,7 @@ for(const base of bases)for(const shoe of eligibleShoes){
  const baseTemp=required.reduce((t,g)=>t+warmth(g),0);
  // The complete base outfit must be comfortable at the warmest scheduled hour.
  // A removable outer layer can then be included for the coldest hour.
- if(hottest!==null&&Math.abs(hottest+baseTemp-72)>5)continue;
+ if(!homeOnly&&hottest!==null&&Math.abs(hottest+baseTemp-72)>5)continue;
  const layers=[null,...by.outer.filter(o=>compatibleSet([...required,o]))];
  let variants=[];
  for(const layer of layers){
@@ -105,7 +113,7 @@ for(const base of bases)for(const shoe of eligibleShoes){
    if(ST.activities.some(a=>garments.some(g=>!hasOccasion(g,a.type))))continue;
    const total=baseTemp+(layer?warmth(layer):0);
    // Reject a full outfit variant if its combined insulation misses the coldest hour.
-   if(coldest!==null&&Math.abs(coldest+total-72)>5)continue;
+   if(!homeOnly&&coldest!==null&&Math.abs(coldest+total-72)>5)continue;
    const warmError=hottest===null?0:Math.abs(hottest+baseTemp-72);
    const coldError=coldest===null?0:Math.abs(coldest+total-72);
    const score=Math.max(0,100-Math.round((warmError+coldError)*2));
