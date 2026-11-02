@@ -171,6 +171,19 @@ function randomAnchor(){
  lockedRoles.add(selected.role);
  results();
 }
+function emptyReason(){
+ const work=ST.activities.map(a=>a.type);
+ const tops=state.items.filter(x=>group(x.category)==='top'&&work.every(t=>hasOccasion(x,t)));
+ const bottoms=state.items.filter(x=>group(x.category)==='bottom'&&work.every(t=>hasOccasion(x,t)));
+ const shoes=state.items.filter(x=>group(x.category)==='shoe'&&work.every(t=>hasOccasion(x,t)));
+ const basePairs=tops.flatMap(t=>bottoms.filter(b=>pair(t,b)).map(b=>[t,b]));
+ const combos=basePairs.reduce((n,[t,b])=>n+shoes.filter(sh=>compatibleSet([t,b,sh])).length,0);
+ const hours=scheduleHours();
+ const temperatures=hours.map(h=>ST.weather?.[h]?.temp).filter(Number.isFinite);
+ const context=temperatures.length?' Scheduled temperatures: '+Math.round(Math.min(...temperatures))+'–'+Math.round(Math.max(...temperatures))+'°F.':' Weather data unavailable for the selected hours.';
+ if(!combos)return 'No approved top + bottom + shoe combinations meet the selected activity tags. Check that cloud decisions have finished loading.'+context;
+ return combos+' approved complete combinations meet your activity tags, but none pass the remaining temperature/layer requirements.'+context+' The ±5°F comfort constraint is still enforced.';
+}
 function results(){
  if(!byid('st-outfit'))return;
  const nextConditionsKey=conditionsKey();
@@ -179,7 +192,7 @@ function results(){
  const groups=build();byid('st-count').textContent='';
  ST.cluster=Math.min(ST.cluster,Math.max(0,groups.length-1));
  const g=groups[ST.cluster];
- if(!g){byid('st-outfit').innerHTML='<div class="empty-s">No outfits satisfy all compatibility, activity and temperature requirements.</div>';return}
+ if(!g){byid('st-outfit').innerHTML='<div class="empty-s">No matching outfits.<p style="margin-top:10px">'+E(emptyReason())+'</p></div>';return}
  if(lastClusterKey!==g.id){
   lastClusterKey=g.id;
   // Preserve unlocked state after changing conditions or using Clear locks.
