@@ -205,6 +205,7 @@ function renderDetail(m){
 }
 function isHomeOnly(item){const occasions=Array.isArray(item.occasions)?item.occasions:String(item.occasions||'').split(',');const tags=occasions.map(x=>String(x).trim().toLowerCase()).filter(Boolean);return tags.length===1&&tags[0]==='home'}
 function hasHomeOccasion(item){const occasions=Array.isArray(item.occasions)?item.occasions:String(item.occasions||'').split(',');return occasions.some(x=>String(x).trim().toLowerCase()==='home')}
+function hasSpecialty(g){return (g.occasions||[]).some(o=>String(o).trim().toLowerCase()==='specialty')}
 function homePairAllowed(a,b){return (!isHomeOnly(a)||hasHomeOccasion(b))&&(!isHomeOnly(b)||hasHomeOccasion(a))}
 function allPairs(){
  const result=[], items=state.items;
@@ -212,7 +213,7 @@ function allPairs(){
  const allowed=new Set(['bottom|top','bottom|shoes','bottom|outer','outer|top','dress|outer','bag|top','bag|outer','bag|dress']);
  for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++){
    let a=role(items[i].category),b=role(items[j].category);
-   if(a&&b&&allowed.has([a,b].sort().join('|'))&&homePairAllowed(items[i],items[j]))result.push([items[i],items[j]]);
+   if(a&&b&&!hasSpecialty(items[i])&&!hasSpecialty(items[j])&&allowed.has([a,b].sort().join('|'))&&homePairAllowed(items[i],items[j]))result.push([items[i],items[j]]);
  }
  return result;
 }
