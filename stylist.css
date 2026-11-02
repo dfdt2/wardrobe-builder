@@ -138,3 +138,14 @@
 
 /* Multiple independent garment locks */
 .stylist .stylist-slot.locked-slot{border:3px solid #ffd600!important;box-shadow:0 0 0 2px rgba(255,214,0,.20);border-radius:12px}
+
+/* Responsive date controls and light hourly forecast graph */
+.stylist .location-input{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.06fr);gap:8px;width:100%}
+.stylist .location-input>input{width:100%;min-width:0;text-overflow:ellipsis}
+.stylist .date-wrap-s{width:100%;min-width:0;max-width:100%;overflow:hidden;display:flex;gap:5px;padding:0 7px}
+.stylist .date-wrap-s>span{flex:0 0 auto;font-size:clamp(11px,2.7vw,14px)}
+.stylist .date-wrap-s input{flex:1 1 0;min-width:0;width:0;font-size:clamp(11px,2.7vw,13px);padding:9px 0}
+.stylist .forecast-s{display:block;width:100%;min-width:0}
+.stylist .forecast-s .weather-graph-s{width:100%;background:linear-gradient(180deg,#fbfdff,#f6fafb);border:1px solid #edf0f2;border-radius:14px;overflow:hidden;padding:7px 3px}
+.stylist .forecast-s .weather-graph-s svg{display:block;width:100%;height:auto}
+@media(max-width:370px){.stylist .location-input{grid-template-columns:1fr}.stylist .date-wrap-s input{width:auto}}
