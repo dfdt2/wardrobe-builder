@@ -30,3 +30,9 @@ Occasions are MULTI-SELECT TAGS on garments, not garment categories. A garment c
 - Imported or older browser-local wardrobe data
 
 No existing pairwise compatibility votes should be deleted or reset by a tag migration.
+
+## Specialty compatibility policy
+- Any garment tagged **Specialty** is excluded from the Compatibility Trainer, even when it also has Daily, Work, Date, or other occasion tags.
+- Do not offer any pair involving a Specialty garment for voting, and do not include these pairs in trainer progress counts.
+- The Stylist must not require approval for Specialty-involving pairs, since they cannot be trained. An explicit preexisting rejection may still be honored.
+- Switching off Specialty restores normal compatibility eligibility. Existing votes are retained; do not delete them.
