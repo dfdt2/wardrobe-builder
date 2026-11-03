@@ -239,7 +239,10 @@ function renderTrainer(m){
  const revisiting=trainerHistoryPosition>=0;
  m.innerHTML=`<section class="page"><div class="toolbar"><select id="traincat1" class="pill">${types().map(t=>`<option ${state.trainerTypes[0]===t?'selected':''}>${esc(t)}</option>`).join('')}</select><span style="align-self:center;color:#aaa">×</span><select id="traincat2" class="pill">${types().map(t=>`<option ${state.trainerTypes[1]===t?'selected':''}>${esc(t)}</option>`).join('')}</select></div><div class="progress"><div style="width:${all.length?done/all.length*100:0}%"></div></div><p class="note">${done} of ${all.length} reviewed · ${pending.length} remaining</p><p class="note" id="trainer-sync-status">${window.wardrobeSyncStatus==='failed'?'Cloud sync failed — decisions kept on this device':window.wardrobeSyncStatus==='saving'?'Saving to cloud…':window.wardrobeSyncStatus==='pending'?'Cloud save pending':window.wardrobeSyncStatus==='saved'?'Saved to Supabase':'Cloud sync not yet enabled'}${Number.isInteger(window.wardrobeCloudCount)?' · '+window.wardrobeCloudCount.toLocaleString()+' total cloud decisions':''}</p>${curr?`<div class="trainerpair">${curr.map(x=>`<button type="button" class="paircard" data-trainer-item="${esc(x.item_code)}" aria-label="View and edit ${esc(x.name)} details" style="width:100%;color:inherit;font:inherit"><img src="${esc(image(x))}" alt="${esc(x.name)}"><strong>${esc(x.name)}</strong><small>${esc(x.brand||'No brand')}</small></button>`).join('')}</div><div class="actions"><button class="secondary" id="trainerBack" ${!trainerHistory.length||trainerHistoryPosition===0?'disabled':''}>← Back</button><button class="no" data-decision="no">✕ No</button><button data-decision="skip">Skip →</button><button class="yes" data-decision="yes">✓ Yes</button></div>${revisiting?'<p class="note" style="text-align:center">Reviewing an earlier pair — select Yes or No to update it.</p>':''}`:`<div class="empty"><h3>All caught up</h3><p>All eligible comparisons are reviewed.</p><button class="secondary" id="trainerBack" ${!trainerHistory.length?'disabled':''}>← Back</button></div>`}</section>`;
 }
+let networkRatingsCacheKey=null,networkRatingsCacheValue=null;
 function networkGarmentRatings(){
+ const cacheKey=state.items.map(x=>x.item_code).join('|')+'#'+JSON.stringify(state.pairs);
+ if(networkRatingsCacheKey===cacheKey&&networkRatingsCacheValue)return networkRatingsCacheValue;
  const items=state.items,n=items.length,ids=new Map(items.map((x,i)=>[x.item_code,i]));
  const adj=Array.from({length:n},()=>new Set()),totals=new Uint32Array(n),evaluated=new Uint32Array(n);
  for(const [a,b] of allPairs()){
@@ -297,13 +300,15 @@ function networkGarmentRatings(){
   return values.map(v=>sorted.length<=1?1:.05+.95*index.get(v)/(sorted.length-1));
  }
  const scaled=[degree,pr,between,core].map(percentiles);
- return items.map((item,i)=>{
+ const output=items.map((item,i)=>{
   const coverage=totals[i]?evaluated[i]/totals[i]:0;
   const v=scaled.map(a=>a[i]);
   const score=4/v.reduce((sum,x)=>sum+1/x,0);
   return {item,total:totals[i],evaluated:evaluated[i],coverage,eligible:totals[i]>0&&coverage>.8,
    degree:degree[i],pagerank:pr[i],betweenness:between[i],kcore:core[i],score};
  }).sort((a,b)=>Number(b.eligible)-Number(a.eligible)||b.score-a.score||b.coverage-a.coverage);
+ networkRatingsCacheKey=cacheKey;networkRatingsCacheValue=output;
+ return output;
 }
 let networkGroupCount=2;
 function renderNetwork(m){
