@@ -45,10 +45,9 @@ function forecast(){
    // Each activity boundary follows the same start/end times as the schedule sliders.
    const boundaries=ST.activities.flatMap((a,i)=>[{h:a.start,kind:'Start',i},{h:a.end,kind:'End',i}]).filter(b=>Number.isFinite(b.h));
    const scheduleMarkers=boundaries.map((b,k)=>{const xx=x(Math.min(23,b.h)),w=ST.weather?.[Math.min(23,b.h)],temp=w&&Number.isFinite(Number(w.temp))?Number(w.temp):null;
-     const yy=temp===null?null:y(temp),label=time(b.h),labelY=38+(k%2)*15;
+     const yy=temp===null?null:y(temp),labelY=yy===null?null:(yy<83?yy+29:yy-19);
      return '<line x1="'+xx+'" x2="'+xx+'" y1="'+T+'" y2="'+(H-B)+'" stroke="#171717" stroke-width="1.5" stroke-dasharray="4 3"/>'+
-       (yy===null?'':'<circle cx="'+xx+'" cy="'+yy+'" r="5.5" fill="#171717" stroke="white" stroke-width="2"/>')+
-       '<text x="'+xx+'" y="'+labelY+'" text-anchor="middle" font-size="13" font-weight="700" fill="#171717">'+b.kind+' '+label+'</text>';
+       (yy===null?'':'<circle cx="'+xx+'" cy="'+yy+'" r="5.5" fill="#171717" stroke="white" stroke-width="2"/><text x="'+xx+'" y="'+labelY+'" text-anchor="middle" font-size="21" font-weight="700" fill="#171717">'+Math.round(temp)+'°</text>');
    }).join('');
    slot.innerHTML='<div class="weather-graph-s"><svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Hourly temperature from midnight to 11 PM, low '+Math.round(low.temp)+' degrees at '+time(low.h)+', high '+Math.round(high.temp)+' degrees at '+time(high.h)+'"><defs><linearGradient id="st-area-grad" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffe5a0" stop-opacity=".65"/><stop offset="1" stop-color="#9adce5" stop-opacity=".12"/></linearGradient><linearGradient id="st-line-grad" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#50bad1"/><stop offset=".55" stop-color="#e3bb40"/><stop offset="1" stop-color="#65c0bb"/></linearGradient></defs>'+guide+icons+'<path d="'+area+'" fill="url(#st-area-grad)"/><path d="'+line+'" stroke="url(#st-line-grad)" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" fill="none"/>'+scheduleMarkers+extrema+marks+'</svg></div>';
   }
