@@ -83,11 +83,11 @@ function compatibleSet(items){return items.every((x,i)=>items.slice(i+1).every(y
 function hasOccasion(g,type){return (g.occasions||[]).some(o=>String(o).trim().toLowerCase()===String(type).trim().toLowerCase())}
 // A complete base outfit is either top + pants/skirt + shoes, or dress + shoes.
 // Outerwear is an optional variation and never substitutes for a required item.
-function validBaseOutfit(items){
+function validBaseOutfit(items,shoeOptional=false){
  const count=role=>items.filter(g=>group(g.category)===role).length;
- const dressLook=count('dress')===1&&count('shoe')===1&&count('top')===0&&count('bottom')===0;
- const separatesLook=count('top')===1&&count('bottom')===1&&count('shoe')===1&&count('dress')===0;
- return items.length===(dressLook?2:3)&&(dressLook||separatesLook);
+ const dressLook=count('dress')===1&&(shoeOptional?count('shoe')<=1:count('shoe')===1)&&count('top')===0&&count('bottom')===0;
+ const separatesLook=count('top')===1&&count('bottom')===1&&(shoeOptional?count('shoe')<=1:count('shoe')===1)&&count('dress')===0;
+ return items.length===(dressLook?1+count('shoe'):2+count('shoe'))&&(dressLook||separatesLook);
 }
 function build(){
 const by={top:[],bottom:[],shoe:[],outer:[],dress:[],bag:[],hat:[],scarf:[],gloves:[]};
@@ -111,9 +111,9 @@ let candidates=[];
 const bases=[];
 for(const top of by.top)for(const bottom of by.bottom)if(pair(top,bottom))bases.push([top,bottom]);
 for(const dress of by.dress)bases.push([dress]);
-for(const base of bases)for(const shoe of eligibleShoes){
- const required=[...base,shoe];
- if(!validBaseOutfit(required)||!compatibleSet(required))continue;
+for(const base of bases)for(const shoe of (homeOnly?[null,...eligibleShoes]:eligibleShoes)){
+ const required=shoe?[...base,shoe]:[...base];
+ if(!validBaseOutfit(required,homeOnly)||!compatibleSet(required))continue;
  // Every scheduled activity must be represented by at least one garment occasion.
  // Every required garment must carry every scheduled activity label.
  if(ST.activities.some(a=>required.some(g=>!hasOccasion(g,a.type))))continue;
