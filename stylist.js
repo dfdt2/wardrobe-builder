@@ -163,7 +163,7 @@ for(const candidate of candidates)for(const variant of candidate.variants){
 const variants=[...unique.values()].sort((a,b)=>b.score-a.score);
 return variants.length?[{id:'all-outfits',variants}]:[];
 }
-const SLOT_ORDER=['top','outer','bottom','shoe','bag','hat','scarf','gloves'];
+const SLOT_ORDER=['top','outer','bottom','shoe','bag','scarf','hat','gloves'];
 let slotSelection={};
 let lockedRoles=new Set(['top']);
 let suppressAnchorClick=false;
@@ -241,7 +241,7 @@ function results(){
  byid('st-count').textContent='Comfort: '+low+'–'+high+'°F';
  byid('st-count').title='Estimated outdoor comfort range, using optional outerwear at colder temperatures (72°F target ±5°F).';
  const labels={top:'Top / dress',outer:'Jacket',bottom:'Pants / skirt',shoe:'Shoes',bag:'Bag',hat:'Hat',scarf:'Scarf',gloves:'Gloves'};
- const slots=SLOT_ORDER.filter(role=>!['hat','scarf','gloves'].includes(role)||chosen.garments.some(x=>roleOf(x)===role)||g.variants.some(v=>v.garments.some(x=>roleOf(x)===role))).map(role=>{
+ const slots=SLOT_ORDER.map(role=>{
   const possible=[...new Map(optionsForSlot(g,role).map(v=>{const item=garmentFor(v,role);return [item?.item_code||'',item]})).values()];
   const current=garmentFor(chosen,role),code=current?.item_code||'';
   const index=possible.findIndex(x=>(x?.item_code||'')===code);
