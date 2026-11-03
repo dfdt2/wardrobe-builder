@@ -68,7 +68,7 @@ const BASELINE_CLO_F=8;
 function effectiveWarmth(raw){return raw-BASELINE_CLO_F}
 function scheduleHours(){const out=new Set();for(const a of ST.activities)for(let h=a.start;h<a.end;h++)out.add(h);return [...out].sort((a,b)=>a-b)}
 // Require approval only for relationships that the trainer offers for evaluation.
-const ROLE=(c,g)=>g?roleOf(g):(c==='Tops'?'top':(['Pants','Skirts'].includes(c)?'bottom':c==='Shoes'?'shoe':c==='Outerwear'?'outer':c==='Bags'?'bag':c==='Dresses'?'dress':null);
+const ROLE=(c,g)=>g?roleOf(g):c==='Tops'?'top':(['Pants','Skirts'].includes(c)?'bottom':c==='Shoes'?'shoe':c==='Outerwear'?'outer':c==='Bags'?'bag':c==='Dresses'?'dress':null);
 const TRAINABLE=new Set(['bottom|top','bottom|shoe','bottom|outer','outer|top','dress|outer','bag|top','bag|outer','bag|dress','hat|outer','gloves|outer','outer|scarf','hat|scarf','gloves|scarf','gloves|hat']);
 function trainerEligible(a,b){const x=ROLE(a.category,a),y=ROLE(b.category,b);return !!(x&&y&&!hasOccasion(a,'Specialty')&&!hasOccasion(b,'Specialty')&&TRAINABLE.has([x,y].sort().join('|')))}
 function compatibleSet(items){return items.every((x,i)=>items.slice(i+1).every(y=>(trainerEligible(x,y)?pair(x,y):state.pairs[[x.item_code,y.item_code].sort().join('::')]!==false)))}
