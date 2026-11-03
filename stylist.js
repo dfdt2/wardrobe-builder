@@ -117,9 +117,10 @@ for(const base of bases)for(const shoe of (homeOnly?[null,...eligibleShoes]:elig
  // Every required garment must carry every scheduled activity label.
  if(ST.activities.some(a=>required.some(g=>!hasOccasion(g,a.type))))continue;
  const baseTemp=effectiveWarmth(required.reduce((t,g)=>t+warmth(g),0));
- // The complete base outfit must be comfortable at the warmest scheduled hour.
- // A removable outer layer can then be included for the coldest hour.
- if(!homeOnly&&hottest!==null&&Math.abs(hottest+baseTemp-72)>5)continue;
+ // A coat is optional, not mandatory to remove at the warmest hour.
+ // At every scheduled hour, either the base outfit or the outfit with this coat
+ // must satisfy the existing 72°F ±5°F comfort requirement. The coat may remain
+ // on throughout the schedule, and a narrow range needs no layer changes.
  const layers=[null,...by.outer.filter(o=>compatibleSet([...required,o]))];
  let variants=[];
  for(const layer of layers){
@@ -127,11 +128,15 @@ for(const base of bases)for(const shoe of (homeOnly?[null,...eligibleShoes]:elig
    // Optional outerwear must satisfy the same activity restrictions.
    if(ST.activities.some(a=>garments.some(g=>!hasOccasion(g,a.type))))continue;
    const total=baseTemp+(layer?warmth(layer):0);
-   // Reject a full outfit variant if its combined insulation misses the coldest hour.
-   if(!homeOnly&&coldest!==null&&Math.abs(coldest+total-72)>5)continue;
-   const warmError=hottest===null?0:Math.abs(hottest+baseTemp-72);
-   const coldError=coldest===null?0:Math.abs(coldest+total-72);
-   const score=Math.max(0,100-Math.round((warmError+coldError)*2));
+   const errors=temps.map(temp=>Math.min(
+     Math.abs(temp+baseTemp-72),
+     layer?Math.abs(temp+total-72):Infinity
+   ));
+   // The union of available layer configurations must cover *all* scheduled hours.
+   if(!homeOnly&&errors.some(error=>error>5))continue;
+   const score=Math.max(0,100-Math.round(
+     (errors.length?errors.reduce((sum,error)=>sum+error,0)/errors.length:0)*4
+   ));
    // Use a compatible bag whenever one exists; "No bag" is fallback only.
    const compatibleBags=by.bag.filter(bag=>
      compatibleSet([...garments,bag])&&
