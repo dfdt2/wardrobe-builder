@@ -275,18 +275,6 @@ function networkGarmentRatings(){
   if(result===true){adj[i].add(j);adj[j].add(i)}
  }
  const degree=adj.map(s=>s.size);
- // PageRank with undirected compatibility edges and explicit dangling-node redistribution.
- let pr=Array(n).fill(n?1/n:0);
- for(let t=0;t<60&&n;t++){
-  const next=Array(n).fill(.15/n);
-  let dangling=0;for(let i=0;i<n;i++)if(!degree[i])dangling+=pr[i];
-  for(let i=0;i<n;i++){
-   next[i]+=.85*dangling/n;
-   if(!degree[i])continue;
-   const value=.85*pr[i]/degree[i];for(const j of adj[i])next[j]+=value;
-  }
-  const diff=next.reduce((a,v,i)=>a+Math.abs(v-pr[i]),0);pr=next;if(diff<1e-9)break;
- }
  // Brandes shortest-path betweenness for an undirected, unweighted graph.
  const between=Array(n).fill(0);
  for(let root=0;root<n;root++){
@@ -307,27 +295,26 @@ function networkGarmentRatings(){
   }
  }
  for(let i=0;i<n;i++)between[i]/=2;
- // Core decomposition: iterative peeling by smallest current residual degree.
- const residual=degree.slice(),removed=new Uint8Array(n),core=Array(n).fill(0);
- let remaining=n,current=0;
- while(remaining){
-  let best=-1;for(let i=0;i<n;i++)if(!removed[i]&&(best<0||residual[i]<residual[best]))best=i;
-  current=Math.max(current,residual[best]);core[best]=current;removed[best]=1;remaining--;
-  for(const v of adj[best])if(!removed[v]&&residual[v]>current)residual[v]--;
+ // Approved, complete base outfit opportunities.
+ const outfitCounts=Array(n).fill(0), idsOf=cat=>items.flatMap((x,i)=>x.category===cat?[i]:[]);
+ const bottoms=new Set([...idsOf('Pants'),...idsOf('Skirts')]),shoes=new Set(idsOf('Shoes'));
+ const complete=[];
+ for(const t of idsOf('Tops'))for(const b of adj[t])if(bottoms.has(b))for(const s of adj[b])if(shoes.has(s))complete.push([t,b,s]);
+ for(const d of idsOf('Dresses'))for(const s of adj[d])if(shoes.has(s))complete.push([d,s]);
+ const outer=idsOf('Outerwear');
+ for(const base of complete){
+   for(const i of base)outfitCounts[i]++;
+   for(const o of outer)if(base.length===3?adj[o].has(base[0])&&adj[o].has(base[1]):adj[o].has(base[0]))outfitCounts[o]++;
  }
- // Smoothed percentile ranks prevent the harmonic mean from collapsing to zero
- // for garments that have no bridge role, while preserving metric ordering.
- function percentiles(values){
-  const sorted=[...new Set(values)].sort((a,b)=>a-b),index=new Map(sorted.map((v,i)=>[v,i]));
-  return values.map(v=>sorted.length<=1?1:.05+.95*index.get(v)/(sorted.length-1));
- }
- const scaled=[degree,pr,between,core].map(percentiles);
+ for(let i=0;i<n;i++)if(['Bags','Other'].includes(items[i].category))outfitCounts[i]=[...adj[i]].reduce((sum,j)=>sum+outfitCounts[j],0);
+ const maxOutfits=Math.max(1,...outfitCounts),maxBridge=Math.max(1,...between);
  const output=items.map((item,i)=>{
   const coverage=totals[i]?evaluated[i]/totals[i]:0;
-  const v=scaled.map(a=>a[i]);
-  const score=4/v.reduce((sum,x)=>sum+1/x,0);
-  return {item,total:totals[i],evaluated:evaluated[i],coverage,eligible:totals[i]>0&&coverage>.8,
-   degree:degree[i],pagerank:pr[i],betweenness:between[i],kcore:core[i],score};
+  const approvedRate=evaluated[i]?degree[i]/evaluated[i]:0;
+  const versatility=Math.log1p(outfitCounts[i])/Math.log1p(maxOutfits);
+  const bridge=Math.log1p(between[i])/Math.log1p(maxBridge);
+  const score=.4*approvedRate+.4*versatility+.2*bridge;
+  return {item,total:totals[i],evaluated:evaluated[i],coverage,eligible:totals[i]>0&&coverage>=.8,degree:degree[i],approvedRate,outfitCount:outfitCounts[i],betweenness:between[i],score};
  }).sort((a,b)=>Number(b.eligible)-Number(a.eligible)||b.score-a.score||b.coverage-a.coverage);
  networkRatingsCacheKey=cacheKey;networkRatingsCacheValue=output;
  return output;
@@ -419,9 +406,9 @@ function renderNetwork(m){
  const shown=ranked.filter(r=>(categoryFilter==='All'||r.item.category===categoryFilter)&&passesFilters(r.item,networkFilters)&&image(r.item))
  .sort((a,b)=>networkRankingSort==='score-asc'?a.score-b.score:b.score-a.score);
  const ratingMarkup='<section class="network-ratings"><div class="network-ratings-head"><h3>Garment graph rankings</h3><span>'+ranked.length+' eligible · ≥80% reviewed</span></div>'+
- '<p>Only items with at least 80% of their possible compatibility comparisons reviewed appear here. Combined score weighs four graph measures equally: <strong>Degree</strong> = number of approved matches; <strong>Well-connected matches</strong> (PageRank) = how connected your matching garments are; <strong>Betweenness</strong> = how much an item bridges different groups; <strong>Core strength</strong> (K-core) = how deeply it belongs to a mutually connected group. K-core values can tie.</p>'+
+ '<p>Only garments with at least 80% of eligible comparisons reviewed. <strong>Match success (40%)</strong>: share of reviewed pairs approved. <strong>Outfit versatility (40%)</strong>: approved complete outfit opportunities. <strong>Bridge importance (20%)</strong>: links otherwise separate clothing groups. Bags and accessories use connected outfit opportunities as a proxy.</p>'+
  '<div class="network-ranking-controls"><label>Category<select id="network-ranking-category">'+categoryChoices.map(v=>'<option value="'+esc(v)+'" '+(categoryFilter===v?'selected':'')+'>'+esc(v)+'</option>').join('')+'</select></label><label>Combined score<select id="network-ranking-sort"><option value="score-desc" '+(networkRankingSort==='score-desc'?'selected':'')+'>Highest first</option><option value="score-asc" '+(networkRankingSort==='score-asc'?'selected':'')+'>Lowest first</option></select></label></div>'+
- (shown.length?'<div class="network-rating-list">'+shown.map(r=>'<button type="button" class="network-rating-item" data-rating-item="'+esc(r.item.item_code)+'"><img src="'+esc(image(r.item))+'" alt=""><span class="network-rating-name"><strong>'+esc(r.item.name||r.item.brand||r.item.category)+'</strong><small>'+esc(r.item.category)+' · '+r.evaluated+'/'+r.total+' reviewed ('+Math.round(r.coverage*100)+'%)</small><small>Degree '+r.degree+' · Well-connected matches '+(r.pagerank*100).toFixed(2)+'% · Betweenness '+r.betweenness.toFixed(1)+' · Core strength '+r.kcore+'</small></span><span class="network-rating-score">'+Math.round(r.score*100)+'/100</span></button>').join('')+'</div>':'<div class="network-rating-empty">No garments meet the 80% review threshold for these filters yet.</div>')+'</section>';
+ (shown.length?'<div class="network-rating-list">'+shown.map(r=>'<button type="button" class="network-rating-item" data-rating-item="'+esc(r.item.item_code)+'"><img src="'+esc(image(r.item))+'" alt=""><span class="network-rating-name"><strong>'+esc(r.item.name||r.item.brand||r.item.category)+'</strong><small>'+esc(r.item.category)+' · '+r.evaluated+'/'+r.total+' reviewed ('+Math.round(r.coverage*100)+'%)</small><small>Match success '+Math.round(r.approvedRate*100)+'% ('+r.degree+' approved) · Outfit opportunities '+r.outfitCount+' · Bridge '+r.betweenness.toFixed(1)+'</small></span><span class="network-rating-score">'+Math.round(r.score*100)+'/100</span></button>').join('')+'</div>':'<div class="network-rating-empty">No garments meet the 80% review threshold for these filters yet.</div>')+'</section>';
  m.innerHTML=controls+(state.filtersOpen?filterSheet():'')+'<div class="network-group-control"><label for="network-group-slider">Groups <strong id="network-group-value">'+Math.min(n,networkGroupCount)+'</strong></label><input id="network-group-slider" type="range" min="1" max="'+Math.max(1,Math.min(20,n))+'" step="1" value="'+Math.min(n,networkGroupCount)+'" '+(n<2?'disabled':'')+'></div><div class="net-screen"><svg viewBox="0 0 '+canvasW+' '+canvasH+'" aria-label="Wardrobe compatibility network"><g class="net-clusters">'+hullMarkup+'</g><g class="net-links">'+edgeMarkup+'</g><g class="net-points">'+nodeMarkup+'</g></svg><button class="net-clear" type="button" hidden>Clear selection</button><button class="net-reset" type="button">Reset view</button></div>'+ratingMarkup;
  m.querySelector('#network-ranking-category')?.addEventListener('change',e=>{networkRankingCategory=e.target.value;renderNetwork(m)});
  m.querySelector('#network-ranking-sort')?.addEventListener('change',e=>{networkRankingSort=e.target.value;renderNetwork(m)});
