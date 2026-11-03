@@ -101,7 +101,8 @@ const temps=hours.map(h=>{
  return active.length&&active.every(a=>a.type==='Home')?indoorTemp:ST.weather?.[h]?.temp;
 }).filter(Number.isFinite);
 const hottest=temps.length?Math.max(...temps):null,coldest=temps.length?Math.min(...temps):null;
-const coldAccessories=!homeOnly&&coldest!==null&&coldest<40;
+const accessoryThresholds={hat:40,scarf:60,gloves:50};
+ const accessoryAvailable=role=>!homeOnly&&coldest!==null&&coldest<accessoryThresholds[role];
 // Exclude open-toed footwear if any scheduled hour is colder than 60°F.
 const excludeOpenToe=!homeOnly&&hours.some(h=>ST.activities.some(a=>a.type!=='Home'&&h>=a.start&&h<a.end)&&ST.weather?.[h]?.temp<60);
 const eligibleShoes=by.shoe.filter(shoe=>!excludeOpenToe||!['sandals','sandal heels'].includes(String(shoe.subcategory||'').trim().toLowerCase()));
@@ -146,7 +147,7 @@ for(const base of bases)for(const shoe of (homeOnly?[null,...eligibleShoes]:elig
      const outfit=bag?[...garments,bag]:garments;
      // Each accessory is optional. When present it must be compatible with the coat
      // and every other selected cold-weather accessory, with a recorded Yes vote.
-     const accessoryOptions=coldAccessories&&layer?['hat','scarf','gloves'].map(role=>[null,...by[role].filter(a=>!hasOccasion(a,'Specialty')&&!ST.activities.some(act=>!hasOccasion(a,act.type))&&compatibleSet([layer,a]))]):[[null],[null],[null]];
+     const accessoryOptions=['hat','scarf','gloves'].map(role=>[null,...(layer&&accessoryAvailable(role)?by[role].filter(a=>!hasOccasion(a,'Specialty')&&!ST.activities.some(act=>!hasOccasion(a,act.type))&&compatibleSet([layer,a])):[])]);
      for(const hat of accessoryOptions[0])for(const scarf of accessoryOptions[1])for(const gloves of accessoryOptions[2]){
        const accessories=[hat,scarf,gloves].filter(Boolean);
        if(!compatibleSet([layer,...accessories].filter(Boolean)))continue;
