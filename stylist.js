@@ -54,7 +54,39 @@ function forecast(){
  }
  const msg=byid('st-weather-msg');if(msg){msg.textContent=ST.weatherMessage;msg.style.display=ST.weather||!ST.weatherMessage?'none':'block';}
 }
-function schedule(){const slot=byid('st-activities');if(!slot)return;slot.innerHTML=ST.activities.map((a,i)=>`<div class="activity-s"><select aria-label="Activity ${i+1}" data-st-activity="${i}" data-key="type">${options(a.type,TYPES)}</select><div class="time-slider-s"><div class="range-labels-s"><span data-time="start">${time(a.start)}</span><span data-time="end">${time(a.end)}</span></div><div class="time-range-track" data-time-range="${i}" style="--start:${a.start/24*100}%;--end:${a.end/24*100}%"><div class="time-range-fill"></div><button type="button" class="time-range-handle start" data-range-handle="start" role="slider" aria-label="Start time" aria-valuemin="0" aria-valuemax="${a.end-1}" aria-valuenow="${a.start}" aria-valuetext="${time(a.start)}" style="left:${a.start/24*100}%"></button><button type="button" class="time-range-handle end" data-range-handle="end" role="slider" aria-label="End time" aria-valuemin="${a.start+1}" aria-valuemax="24" aria-valuenow="${a.end}" aria-valuetext="${time(a.end)}" style="left:${a.end/24*100}%"></button></div></div><details class="walking-steps-s" style="grid-column:1/-1;margin:3px 0 6px"><summary style="cursor:pointer;font-size:12px;color:#777">Walking distance${a.walkingThousands!==undefined&&a.walkingThousands!==''?' · '+E(a.walkingThousands)+'k steps':''}</summary><label style="display:flex;align-items:center;gap:8px;margin-top:9px;font-size:12px;color:#666">Thousands of steps <input aria-label="Walking distance for activity ${i+1}, in thousands of steps" type="number" min="0" step="0.5" data-st-walking="${i}" value="${E(a.walkingThousands??'')}" placeholder="Any" style="width:100px;padding:8px;border:1px solid #ddd;border-radius:8px"></label></details><button class="tiny remove-s" data-st="remove" data-index="${i}" aria-label="Remove activity">×</button></div>`).join('');}
+// Walking estimates for a 5'4"-5'5" adult at a normal pace.
+// Store shoe requirements in actual steps; mile/minute inputs are approximate.
+const WALK_STEPS_PER_MILE=2300,WALK_STEPS_PER_MINUTE=100;
+function walkingSteps(a){
+ if(a.walkingSteps!==undefined&&a.walkingSteps!==null&&a.walkingSteps!=='')return Math.max(0,Number(a.walkingSteps)||0);
+ // Migrate the older "thousands of steps" activity field without changing its meaning.
+ if(a.walkingThousands!==undefined&&a.walkingThousands!==null&&a.walkingThousands!==''){
+  a.walkingSteps=Math.max(0,Math.round((Number(a.walkingThousands)||0)*1000));
+  delete a.walkingThousands;return a.walkingSteps;
+ }
+ return 0;
+}
+function walkingUnitsValue(steps,unit){
+ if(!steps)return '';
+ if(unit==='miles')return String(Math.round(steps/WALK_STEPS_PER_MILE*100)/100);
+ if(unit==='minutes')return String(Math.round(steps/WALK_STEPS_PER_MINUTE*10)/10);
+ return String(Math.round(steps));
+}
+function schedule(){const slot=byid('st-activities');if(!slot)return;slot.innerHTML=ST.activities.map((a,i)=>{
+ const steps=walkingSteps(a),unit=['steps','miles','minutes'].includes(a.walkingUnit)?a.walkingUnit:'steps';
+ return `<div class="activity-s"><select aria-label="Activity ${i+1}" data-st-activity="${i}" data-key="type">${options(a.type,TYPES)}</select><div class="time-slider-s"><div class="range-labels-s"><span data-time="start">${time(a.start)}</span><span data-time="end">${time(a.end)}</span></div><div class="time-range-track" data-time-range="${i}" style="--start:${a.start/24*100}%;--end:${a.end/24*100}%"><div class="time-range-fill"></div><button type="button" class="time-range-handle start" data-range-handle="start" role="slider" aria-label="Start time" aria-valuemin="0" aria-valuemax="${a.end-1}" aria-valuenow="${a.start}" aria-valuetext="${time(a.start)}" style="left:${a.start/24*100}%"></button><button type="button" class="time-range-handle end" data-range-handle="end" role="slider" aria-label="End time" aria-valuemin="${a.start+1}" aria-valuemax="24" aria-valuenow="${a.end}" aria-valuetext="${time(a.end)}" style="left:${a.end/24*100}%"></button></div></div><details class="walking-steps-s" style="grid-column:1/-1;margin:3px 0 6px"><summary style="cursor:pointer;font-size:12px;color:#777">Walking distance<span data-walk-summary="${i}">${steps?' · '+steps.toLocaleString()+' steps':''}</span></summary><div style="display:flex;align-items:center;gap:8px;margin-top:9px"><input aria-label="Walking distance for activity ${i+1}" type="number" min="0" step="${unit==='miles'?'any':'1'}" data-st-walking="${i}" value="${E(walkingUnitsValue(steps,unit))}" placeholder="Any" style="width:115px;min-width:0;padding:8px;border:1px solid #ddd;border-radius:8px"><select aria-label="Walking distance unit for activity ${i+1}" data-st-walk-unit="${i}" style="width:110px;padding:8px;border:1px solid #ddd;border-radius:8px">${options(unit,['steps','miles','minutes'])}</select></div><div style="font-size:11px;color:#888;margin-top:6px" data-walk-equivalent="${i}">${steps?'≈ '+steps.toLocaleString()+' steps':'Optional · 1 mile ≈ 2,300 steps; 1 minute ≈ 100 steps'}</div></details><button class="tiny remove-s" data-st="remove" data-index="${i}" aria-label="Remove activity">×</button></div>`;
+ }).join('');}
+function setWalkingInput(el){
+ const i=Number(el.dataset.stWalking),a=ST.activities[i];if(!a)return;
+ const raw=el.value.trim(),v=Number(raw),unit=a.walkingUnit||'steps';
+ a.walkingSteps=raw!==''&&Number.isFinite(v)&&v>=0?Math.round(v*(unit==='miles'?WALK_STEPS_PER_MILE:unit==='minutes'?WALK_STEPS_PER_MINUTE:1)):0;
+ delete a.walkingThousands;
+ const steps=a.walkingSteps,summary=byid('st-activities')?.querySelector('[data-walk-summary="'+i+'"]'),equivalent=byid('st-activities')?.querySelector('[data-walk-equivalent="'+i+'"]');
+ if(summary)summary.textContent=steps?' · '+steps.toLocaleString()+' steps':'';
+ if(equivalent)equivalent.textContent=steps?'≈ '+steps.toLocaleString()+' steps':'Optional · 1 mile ≈ 2,300 steps; 1 minute ≈ 100 steps';
+ results();
+}
+
 function paintTimeRange(i){const bar=document.querySelector('[data-time-range="'+i+'"]');const a=ST.activities[i];if(!bar||!a)return;bar.style.setProperty('--start',a.start/24*100+'%');bar.style.setProperty('--end',a.end/24*100+'%');const row=bar.closest('.activity-s');row.querySelector('[data-time="start"]').textContent=time(a.start);row.querySelector('[data-time="end"]').textContent=time(a.end);for(const key of ['start','end']){const h=bar.querySelector('[data-range-handle="'+key+'"]');h.style.left=a[key]/24*100+'%';h.setAttribute('aria-valuenow',a[key]);h.setAttribute('aria-valuetext',time(a[key]));h.setAttribute('aria-valuemin',key==='start'?0:a.start+1);h.setAttribute('aria-valuemax',key==='start'?a.end-1:24)}}
 function moveTimeHandle(i,key,value){const a=ST.activities[i];if(!a)return;const h=Math.round(Math.max(0,Math.min(24,value)));a[key]=key==='start'?Math.min(h,a.end-1):Math.max(h,a.start+1);paintTimeRange(i);forecast();}
 let activeTimeDrag=null;
@@ -105,7 +137,7 @@ const accessoryThresholds={hat:40,scarf:60,gloves:50};
  const accessoryAvailable=role=>!homeOnly&&coldest!==null&&coldest<accessoryThresholds[role];
 // Exclude open-toed footwear if any scheduled hour is colder than 60°F.
 const excludeOpenToe=!homeOnly&&hours.some(h=>ST.activities.some(a=>a.type!=='Home'&&h>=a.start&&h<a.end)&&ST.weather?.[h]?.temp<60);
-const requiredWalkingSteps=ST.activities.reduce((n,a)=>n+(Number.isFinite(Number(a.walkingThousands))&&a.walkingThousands!==''?Math.max(0,Number(a.walkingThousands))*1000:0),0);
+const requiredWalkingSteps=ST.activities.reduce((n,a)=>n+walkingSteps(a),0);
  const eligibleShoes=by.shoe.filter(shoe=>(!excludeOpenToe||!['sandals','sandal heels'].includes(String(shoe.subcategory||'').trim().toLowerCase()))&&(requiredWalkingSteps===0||shoeComfortSteps(shoe)!==null&&shoeComfortSteps(shoe)>=requiredWalkingSteps));
 const categoryRank=x=>x.category==='Dresses'?0:1;
 let candidates=[];
@@ -176,7 +208,7 @@ let suppressAnchorClick=false;
 let lastClusterKey='';
 let lastConditionsKey=null;
 function clearAllLocks(){lockedRoles.clear();slotSelection={};}
-function conditionsKey(){return JSON.stringify({activities:ST.activities.map(a=>[a.type,a.start,a.end,a.walkingThousands]),date:ST.date,location:ST.location,weather:ST.weather});}
+function conditionsKey(){return JSON.stringify({activities:ST.activities.map(a=>[a.type,a.start,a.end,walkingSteps(a)]),date:ST.date,location:ST.location,weather:ST.weather});}
 function garmentFor(v,role){return v.garments.find(x=>roleOf(x)===role||(role==='top'&&group(x.category)==='dress'))||null}
 function itemCode(v,role){return garmentFor(v,role)?.item_code||''}
 function matchingLocks(g,omit=null){return g.variants.filter(v=>[...lockedRoles].every(r=>r===omit||!slotSelection[r]||itemCode(v,r)===slotSelection[r]))}
@@ -298,7 +330,7 @@ function detect(){if(!navigator.geolocation){ST.weatherMessage='Location permiss
 window.renderStylist=function(m){if(!ST.dateManual)ST.date=defaultDate();setTitle("Stylist");m.innerHTML=body();schedule();forecast();results();if(!ST.geolocationTried){ST.geolocationTried=true;detect()}};
 document.addEventListener('click',e=>{if(suppressAnchorClick){suppressAnchorClick=false;e.preventDefault();e.stopImmediatePropagation()}},true);
 document.addEventListener('click',e=>{if(state.page!=='stylist')return;const b=e.target.closest('[data-st]');if(!b)return;const act=b.dataset.st;if(act==='open-item'){openItemDetail(b.dataset.itemCode,'stylist','matches');return}if(act==='random-anchor'){randomAnchor();return}if(act==='clear-locks'){clearAllLocks();results();return}if(act==='cycle-slot'){cycleSlot(b.dataset.role,Number(b.dataset.step));return}if(act==='set-anchor'){toggleLock(b.dataset.role);return}if(act==='detect')detect();if(act==='search')searchLocation();if(act==='add'){const end=ST.activities.at(-1)?.end||17;ST.activities.push({type:'Daily',start:Math.max(6,Math.min(23,end)),end:Math.min(24,Math.max(7,end+1))});schedule();results()}if(act==='remove'){if(ST.activities.length>1){ST.activities.splice(+b.dataset.index,1);schedule();results()}}if(act==='vibe'){ST.vibe=b.dataset.vibe;ST.cluster=0;ST.variant=0;schedule();results()}if(act==='family'){ST.cluster=+b.dataset.index;ST.variant=0;slotSelection={};lastClusterKey='';results()}if(act==='previous'||act==='next'){const g=build()[ST.cluster];if(g)ST.variant=(ST.variant+(act==='next'?1:-1)+g.variants.length)%g.variants.length;results()}});
-document.addEventListener('change',e=>{if(state.page!=='stylist')return;const el=e.target;if(el.id==='st-date'){ST.date=el.value||defaultDate();ST.dateManual=true;const label=byid('st-date-label');if(label)label.textContent=dateLabel(ST.date);ST.weatherKey='';getWeather()}if(el.dataset.stWalking!=null){ST.activities[+el.dataset.stWalking].walkingThousands=el.value;results();return}if(el.dataset.stActivity!=null){const i=+el.dataset.stActivity;const k=el.dataset.key;ST.activities[i][k]=k==='type'?el.value:+el.value;if(ST.activities[i].end<=ST.activities[i].start){if(k==='start')ST.activities[i].start=ST.activities[i].end-1;else ST.activities[i].end=ST.activities[i].start+1}schedule();results()}});
-document.addEventListener('input',e=>{if(state.page==='stylist'&&e.target.dataset.stWalking!=null){ST.activities[+e.target.dataset.stWalking].walkingThousands=e.target.value;results();return}if(state.page==='stylist'&&e.target.id==='st-location'){clearTimeout(locationTimer);locationTimer=setTimeout(()=>{if(byid('st-location')?.value.trim().length>=3)searchLocation()},600)}});
+document.addEventListener('change',e=>{if(state.page!=='stylist')return;const el=e.target;if(el.id==='st-date'){ST.date=el.value||defaultDate();ST.dateManual=true;const label=byid('st-date-label');if(label)label.textContent=dateLabel(ST.date);ST.weatherKey='';getWeather()}if(el.dataset.stWalkUnit!=null){const a=ST.activities[+el.dataset.stWalkUnit];walkingSteps(a);a.walkingUnit=el.value;schedule();return}if(el.dataset.stWalking!=null){setWalkingInput(el);return}if(el.dataset.stActivity!=null){const i=+el.dataset.stActivity;const k=el.dataset.key;ST.activities[i][k]=k==='type'?el.value:+el.value;if(ST.activities[i].end<=ST.activities[i].start){if(k==='start')ST.activities[i].start=ST.activities[i].end-1;else ST.activities[i].end=ST.activities[i].start+1}schedule();results()}});
+document.addEventListener('input',e=>{if(state.page==='stylist'&&e.target.dataset.stWalking!=null){setWalkingInput(e.target);return}if(state.page==='stylist'&&e.target.id==='st-location'){clearTimeout(locationTimer);locationTimer=setTimeout(()=>{if(byid('st-location')?.value.trim().length>=3)searchLocation()},600)}});
 document.addEventListener('keydown',e=>{if(state.page==='stylist'&&e.key==='Enter'&&e.target.id==='st-location'){e.preventDefault();clearTimeout(locationTimer);searchLocation()}});
 })();
