@@ -94,8 +94,34 @@ window.saveCleanoutCloud=async function(rotation){
  if(error)throw error;
 };
 const original=renderSettings;
-renderSettings=function(m){original(m);let c=config();m.insertAdjacentHTML('beforeend',`<section class="page" style="border-top:1px solid #ddd"><h2>Supabase connection</h2><p class="hint">Use the project URL and publishable/anon key (never a service-role or secret key). Sign in before syncing. After loading cloud data, edits and pair decisions sync automatically.</p><div class="field"><label>Project URL</label><input id="cloudurl" placeholder="https://example.supabase.co" value="${esc(c.url||'')}"></div><div class="field"><label>Publishable / anon key</label><input id="cloudkey" placeholder="sb_publishable_… or legacy anon key" value="${esc(c.key||'')}"></div><button class="secondary" id="cloudsave">Save connection settings</button><div class="field"><label>Email</label><input id="cloudemail" type="email" autocomplete="email"></div><div class="field"><label>Password (minimum 6 characters)</label><input id="cloudpassword" type="password" autocomplete="current-password"></div><div class="toolbar"><button class="secondary" id="cloudsignup">Create account</button><button class="primary" id="cloudlogin">Sign in</button><button class="secondary" id="cloudlogout">Sign out</button></div><div class="toolbar"><button class="primary" id="cloudupload">Upload this wardrobe</button><button class="secondary" id="cloudload">Load cloud data</button></div><p id="cloudmsg" class="hint">${cloud.user?'Signed in: '+esc(cloud.user.email):'Not signed in on this page.'}</p><p class="note">Caution: “Load cloud data” replaces current browser items and decisions; export a JSON backup first. Garment images remain publicly accessible to anyone with their image URL.</p></section>`)};
-document.addEventListener('click',async e=>{const id=e.target.closest('button')?.id;if(!id?.startsWith('cloud'))return;try{if(id==='cloudsave'){let url=document.getElementById('cloudurl').value.trim().replace(/\/$/,'');let key=document.getElementById('cloudkey').value.trim();if(!/^https:\/\/.+\.supabase\.co$/.test(url)||!key)throw Error('Enter a valid Supabase project URL and key.');localStorage.setItem(CFGKEY,JSON.stringify({url,key}));cloud.client=null;message('Connection settings saved.');}else if(id==='cloudlogin')await login();else if(id==='cloudsignup')await signup();else if(id==='cloudlogout'){await getClient().auth.signOut();cloud.user=null;cloud.ready=false;localStorage.removeItem('wardrobe-sync-user');message('Signed out.');}else if(id==='cloudupload')await uploadAll();else if(id==='cloudload'){if(confirm('Replace local wardrobe with Supabase records? Export backup first.'))await loadAll()}}catch(err){message('Error: '+err.message)}});
+renderSettings=function(m){
+ original(m);
+ const c=config();
+ // The cloud database is the intended source of truth. Keep maintenance tools out of the main UI.
+ m.innerHTML=`<section class="page" style="max-width:650px;margin:auto">
+ <h2>Wardrobe sync</h2>
+ <p class="hint">Supabase is your primary wardrobe. Update this device with the latest cloud garments and compatibility decisions.</p>
+ <button class="primary" type="button" id="cloudload" style="width:100%;padding:15px;font-size:16px">Update wardrobe</button>
+ <p class="note" style="margin:10px 0 18px">Downloads the current Supabase wardrobe to this device. Unsynced local edits could be replaced.</p>
+ <p id="cloudmsg" class="hint">${cloud.user?'Signed in: '+esc(cloud.user.email):'Not signed in on this device. Open Connection settings below.'}</p>
+ <details style="margin-top:22px;border-top:1px solid #e8e8e8;padding-top:17px">
+  <summary style="cursor:pointer;font-weight:600">Connection settings</summary>
+  <p class="hint" style="margin-top:12px">Only change these if connecting a different account or restoring your connection.</p>
+  <div class="field"><label>Supabase project URL</label><input id="cloudurl" placeholder="https://example.supabase.co" value="${esc(c.url||'')}"></div>
+  <div class="field"><label>Publishable / anon key</label><input id="cloudkey" placeholder="sb_publishable_… or legacy anon key" value="${esc(c.key||'')}"></div>
+  <button class="secondary" id="cloudsave">Save connection settings</button>
+  <div class="field"><label>Email</label><input id="cloudemail" type="email" autocomplete="email"></div>
+  <div class="field"><label>Password</label><input id="cloudpassword" type="password" autocomplete="current-password"></div>
+  <div class="toolbar"><button class="primary" id="cloudlogin">Sign in</button><button class="secondary" id="cloudlogout">Sign out</button><button class="secondary" id="cloudsignup">Create account</button></div>
+  <details style="margin:20px 0;border-top:1px solid #eee;padding-top:14px">
+   <summary style="cursor:pointer;font-size:13px;color:#666">Advanced: upload local wardrobe to Supabase</summary>
+   <p class="hint">Only use this when intentionally transferring locally stored items to the cloud. It may overwrite existing cloud records. Normally use Update wardrobe instead.</p>
+   <button class="secondary" id="cloudupload">Upload this wardrobe to Supabase</button>
+  </details>
+ </details>
+ </section>`;
+};
+document.addEventListener('click',async e=>{const id=e.target.closest('button')?.id;if(!id?.startsWith('cloud'))return;try{if(id==='cloudsave'){let url=document.getElementById('cloudurl').value.trim().replace(/\/$/,'');let key=document.getElementById('cloudkey').value.trim();if(!/^https:\/\/.+\.supabase\.co$/.test(url)||!key)throw Error('Enter a valid Supabase project URL and key.');localStorage.setItem(CFGKEY,JSON.stringify({url,key}));cloud.client=null;message('Connection settings saved.');}else if(id==='cloudlogin')await login();else if(id==='cloudsignup')await signup();else if(id==='cloudlogout'){await getClient().auth.signOut();cloud.user=null;cloud.ready=false;localStorage.removeItem('wardrobe-sync-user');message('Signed out.');}else if(id==='cloudupload')await uploadAll();else if(id==='cloudload'){if(localStorage.getItem('wardrobe-sync-pending')==='1'||cloud.dirty||cloud.saving||cloud.queued){message('Unsynced local changes detected. Sync must finish before updating from Supabase; this prevents overwriting local edits.');return}if(confirm('Update this device from Supabase? This replaces the local wardrobe with the current cloud records.'))await loadAll()}}catch(err){message('Error: '+err.message)}});
 // Track existing session when visiting settings.
 (async()=>{try{let c=config();if(c.url&&c.key){let {data}=await getClient().auth.getUser();cloud.user=data.user||null;
 if(cloud.user&&localStorage.getItem('wardrobe-sync-user')===cloud.user.id){
