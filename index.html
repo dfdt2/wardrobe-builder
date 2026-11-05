@@ -200,7 +200,30 @@ m.innerHTML=`<div class="toprow wardrobe-controls"><button class="filter-trigger
 }
 function colorCss(value){const canonical=canonicalColor(value);if(canonical)return COLOR_PALETTE[canonical];const raw=String(value||'').trim();if(/^#[0-9a-f]{3,8}$/i.test(raw))return raw;return '#c0c0c0';}
 function colorSwatches(x){const colors=Array.isArray(x.colors)?x.colors:[x.colors];return '<span style="display:inline-flex;gap:7px;flex-wrap:wrap;justify-content:flex-end">'+colors.filter(Boolean).map(c=>`<span title="${esc(c)}" aria-label="${esc(c)}" role="img" style="display:inline-block;width:24px;height:24px;flex:none;border:1px solid #b6b6b6;border-radius:50%;background:${colorCss(c)}"></span>`).join('')+'</span>'}
+function estimatedAccessoryClo(x){
+ const sub=String(x.subcategory||'').toLowerCase(),name=String(x.name||'').toLowerCase(),materials=(x.materials||[]).join(' ').toLowerCase(),all=name+' '+materials;
+ const wool=/wool|cashmere|alpaca|mohair|merino/.test(all),silk=/silk/.test(all),fleece=/fleece|faux fur|shearling/.test(all),leather=/leather/.test(all);
+ const thick=/thick|chunky|bulky|heavy|fluffy|oversized|cable.knit|thermal/.test(all),light=/thin|lightweight|sheer|gauze|chiffon/.test(all),insulated=/insulated|down|puffer|quilted|ski|winter mitten/.test(all);
+ let clo;
+ if(sub==='hats'){
+  if(/straw|sun hat|wide.brim/.test(all))clo=0;
+  else if(/headband|ear warmer/.test(all))clo=fleece||wool?.08:.05;
+  else if(/hood|balaclava/.test(all))clo=wool||fleece?.20:.15;
+  else clo=insulated?.21:wool||fleece?.16:.09;
+ }else if(sub==='scarves'){
+  if(silk||/chiffon|sheer/.test(all))clo=.025;
+  else clo=wool?.15:fleece?.15:/viscose|cotton|linen/.test(all)?.07:.08;
+ }else if(sub==='gloves'){
+  if(/fingerless/.test(all))clo=wool?.06:.04;
+  else if(/mitten/.test(all))clo=insulated?.22:wool||fleece?.18:.12;
+  else clo=insulated?.20:wool||fleece?.12:leather?.08:.07;
+ }else return null;
+ if(clo>0 && thick)clo+=.03;
+ if(clo>0 && light)clo-=.025;
+ return Math.round(Math.max(0,Math.min(.25,clo))*1000)/1000;
+}
 function estimatedClo(x){if(x.insulation_clo_estimate!==null&&x.insulation_clo_estimate!==undefined&&x.insulation_clo_estimate!==''&&Number.isFinite(Number(x.insulation_clo_estimate)))return Number(x.insulation_clo_estimate);
+const accessoryEstimate=estimatedAccessoryClo(x);if(accessoryEstimate!==null)return accessoryEstimate;
 const values={'t-shirt':.08,'tank top':.05,'shirt':.20,'sweatshirt':.34,'sweater':.30,'nightgown':.20,'fancy':.28,'casual':.24,'shorts':.06,'jeans':.24,'trousers':.24,'track pants':.26,'leggings':.13,'pajama pants':.22,'mini':.12,'midi':.16,'maxi':.22,'trench coat':.40,'fur coat':.65,'jacket':.32,'cardigan':.28,'sports jacket':.30,'puffer jacket':.70,'sneakers':.03,'loafers':.02,'flats':.02,'heels':.02,'sandals':.01,'sandal heels':.01,'boots':.05};
 const sub=String(x.subcategory||'').toLowerCase(),wool=(x.materials||[]).some(m=>/wool|cashmere|alpaca|mohair/i.test(m)),bonus=wool&&['trench coat','jacket','sweater','cardigan','sports jacket','trousers','shirt'].includes(sub)?.05:0;
 return Math.round(Math.min(1.2,(values[sub]??(x.category==='Other'?.04:.12))+bonus)*1000)/1000;}
