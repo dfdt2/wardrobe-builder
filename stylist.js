@@ -6,6 +6,7 @@ const VIBES=['Casual','Minimal','Polished','Sporty','Romantic','Edgy'];
 const iso=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
 const defaultDate=()=>{const d=new Date();if(d.getHours()>=21)d.setDate(d.getDate()+1);return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
 const dateLabel=v=>{const d=new Date();d.setDate(d.getDate()+1);const tomorrow=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');return v===iso()?'Today':v===tomorrow?'Tomorrow':new Date(v+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})};
+let currentOutfitCodes=[];
 const ST={date:defaultDate(),dateManual:false,location:'',lat:null,lon:null,weather:null,weatherKey:'',weatherMessage:'Choose a location to retrieve a forecast.',activities:[{type:'Work',start:8,end:17}],vibe:'Casual',cluster:0,variant:0,requesting:false,geolocationTried:false};
 const E=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const byid=id=>document.getElementById(id);
@@ -20,7 +21,7 @@ function body(){
   <div class="small" id="st-weather-msg" role="status" style="display:none"></div><div id="st-forecast" class="forecast-s"></div></section>
   <section class="panel-s"><h2>Schedule</h2><div id="st-activities"></div><button class="tiny" data-st="add">+ Add activity</button></section>
 
-  </div><div><section class="panel-s"><div class="line-s"><h2>Outfit</h2><div class="outfit-actions-s"><span class="small" id="st-count"></span><button type="button" class="random-outfit-s" data-st="clear-locks" aria-label="Unlock all selected garments">Clear locks</button><button type="button" class="random-outfit-s" data-st="random-anchor" aria-label="Choose a random eligible garment as anchor">Random</button></div></div><div id="st-outfit"></div></section></div></div></section>`;
+  </div><div><section class="panel-s"><div class="line-s"><h2>Outfit recommendation</h2><div class="outfit-actions-s"><span class="small" id="st-count"></span><button type="button" class="random-outfit-s" data-st="clear-locks" aria-label="Unlock all selected garments">Clear locks</button><button type="button" class="random-outfit-s" data-st="random-anchor" aria-label="Choose a random eligible garment as anchor">Random</button></div></div><div id="st-outfit"></div></section></div></div></section>`;
 }
 function weatherTheme(w){if(!w)return 'neutral';if([95,96,99].includes(w.code))return 'storm';if(w.snow>0||[71,73,75,77,85,86].includes(w.code))return 'snow';if([51,53,55,61,63,65,80,81,82].includes(w.code)||w.rain>=70)return 'rain';if([0,1].includes(w.code))return 'sunny';if(w.code===2)return 'partly';return 'cloudy'}
 function weatherSymbol(w,h){const theme=weatherTheme(w);if(theme==='storm')return '⛈';if(theme==='snow')return '❄';if(theme==='rain')return '☂';if(theme==='cloudy')return '☁';if(theme==='partly')return '⛅';return h<6||h>=20?'☾':'☀'}
@@ -228,7 +229,14 @@ function randomAnchor(){
   const code=itemCode(v,role);if(code&&!pool.has(code))pool.set(code,{role,code});
  }
  const choices=[...pool.values()];if(!choices.length)return;
- const selected=choices[Math.floor(Math.random()*choices.length)];
+ // 70% uniformly random; 30% weighted to garments with fewer recorded wears.
+ let selected;
+ if(Math.random()<.30){
+  const weights=choices.map(v=>1/Math.sqrt(1+Math.max(0,Number(state.items.find(x=>x.item_code===v.code)?.wear_count)||0)));
+  let draw=Math.random()*weights.reduce((a,b)=>a+b,0);
+  selected=choices[choices.length-1];
+  for(let i=0;i<choices.length;i++){draw-=weights[i];if(draw<=0){selected=choices[i];break}}
+ }else selected=choices[Math.floor(Math.random()*choices.length)];
  slotSelection[selected.role]=selected.code;
  lockedRoles.add(selected.role);
  results();
@@ -254,7 +262,7 @@ function results(){
  const groups=build();byid('st-count').textContent='';
  ST.cluster=Math.min(ST.cluster,Math.max(0,groups.length-1));
  const g=groups[ST.cluster];
- if(!g){byid('st-outfit').innerHTML='<div class="empty-s">No matching outfits.<p style="margin-top:10px">'+E(emptyReason())+'</p></div>';return}
+ if(!g){currentOutfitCodes=[];byid('st-outfit').innerHTML='<div class="empty-s">No matching outfits.<p style="margin-top:10px">'+E(emptyReason())+'</p></div>';return}
  if(lastClusterKey!==g.id){
   lastClusterKey=g.id;
   // Preserve unlocked state after changing conditions or using Clear locks.
@@ -270,6 +278,7 @@ function results(){
  if(!matching.length){clearAllLocks();matching=g.variants;}
  let chosen=matching.find(v=>SLOT_ORDER.every(role=>!slotSelection[role]||lockedRoles.has(role)||itemCode(v,role)===slotSelection[role]))||matching[0];
  for(const role of SLOT_ORDER)slotSelection[role]=itemCode(chosen,role);
+ currentOutfitCodes=[...new Set(chosen.garments.map(x=>x.item_code).filter(Boolean))];
  const baseGarments=chosen.garments.filter(g=>!['outer','bag','hat','scarf','gloves'].includes(roleOf(g)));
  const coat=chosen.garments.find(g=>group(g.category)==='outer');
  const baseWarmth=baseGarments.reduce((sum,g)=>sum+warmth(g),0);
@@ -290,7 +299,7 @@ function results(){
    (['bag','hat','scarf','gloves'].includes(role)&&!current?'':'<div class="slot-controls"><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="-1" '+(!canCycle?'disabled':'')+' aria-label="Previous '+labels[role]+'">‹</button><small>'+(Math.max(0,index)+1)+' / '+count+'</small><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="1" '+(!canCycle?'disabled':'')+' aria-label="Next '+labels[role]+'">›</button></div>')+'</div>';
  }).join('');
  const localProtection=chosen.garments.filter(x=>['hat','scarf','gloves'].includes(roleOf(x))).map(x=>{const n=Number(x.warmth_contribution_f);return (roleOf(x)==='hat'?'Hat':roleOf(x)==='scarf'?'Scarf':'Gloves')+': '+(Number.isFinite(n)?n.toFixed(1):warmth(x).toFixed(1))+'°F'});
- byid('st-outfit').innerHTML='<div class="stylist-slots">'+slots+'</div>'+(localProtection.length?'<p class="slot-foot">Accessory protection (local estimates, not added to whole-body comfort): '+E(localProtection.join(' · '))+'</p>':'')+'<p class="slot-foot">'+matching.length+' compatible complete outfit'+(matching.length===1?'':'s')+' · Hold an item to lock / unlock</p>';
+ byid('st-outfit').innerHTML='<div class="stylist-slots">'+slots+'</div>'+(localProtection.length?'<p class="slot-foot">Accessory protection (local estimates, not added to whole-body comfort): '+E(localProtection.join(' · '))+'</p>':'')+'<p class="slot-foot">'+matching.length+' compatible complete outfit'+(matching.length===1?'':'s')+' · Hold an item to lock / unlock</p>'+'<div style="margin:16px 4px 5px"><button type="button" data-st="record-wear" class="primary" style="width:100%;padding:13px 16px">I’m wearing this</button><p class="small" id="st-wear-confirmation" role="status" style="margin:8px 0 0;text-align:center"></p></div>';
  const holder=byid('st-outfit');
  holder.querySelectorAll('[data-swipe-role]').forEach(el=>{
   let startX=0,startY=0,holdTimer=null,held=false;
@@ -329,7 +338,7 @@ async function searchLocation(){let name=byid('st-location')?.value.trim();if(!n
 function detect(){if(!navigator.geolocation){ST.weatherMessage='Location permission unavailable';forecast();return}ST.weatherMessage='Detecting location…';forecast();navigator.geolocation.getCurrentPosition(async p=>{ST.lat=p.coords.latitude;ST.lon=p.coords.longitude;ST.location='Current location';if(byid('st-location'))byid('st-location').value=ST.location;try{let r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${ST.lat}&lon=${ST.lon}&format=json&zoom=10&addressdetails=1`);let j=await r.json();if(j.address){ST.location=[j.address.city||j.address.town||j.address.village||j.address.municipality||j.address.county,j.address.state].filter(Boolean).join(', ');if(byid('st-location'))byid('st-location').value=ST.location}}catch(e){}await getWeather()},()=>{ST.weatherMessage='Location access denied. Search for a city instead.';forecast()},{timeout:12000,maximumAge:600000})}
 window.renderStylist=function(m){if(!ST.dateManual)ST.date=defaultDate();setTitle("Stylist");m.innerHTML=body();schedule();forecast();results();if(!ST.geolocationTried){ST.geolocationTried=true;detect()}};
 document.addEventListener('click',e=>{if(suppressAnchorClick){suppressAnchorClick=false;e.preventDefault();e.stopImmediatePropagation()}},true);
-document.addEventListener('click',e=>{if(state.page!=='stylist')return;const b=e.target.closest('[data-st]');if(!b)return;const act=b.dataset.st;if(act==='open-item'){openItemDetail(b.dataset.itemCode,'stylist','matches');return}if(act==='random-anchor'){randomAnchor();return}if(act==='clear-locks'){clearAllLocks();results();return}if(act==='cycle-slot'){cycleSlot(b.dataset.role,Number(b.dataset.step));return}if(act==='set-anchor'){toggleLock(b.dataset.role);return}if(act==='detect')detect();if(act==='search')searchLocation();if(act==='add'){const end=ST.activities.at(-1)?.end||17;ST.activities.push({type:'Daily',start:Math.max(6,Math.min(23,end)),end:Math.min(24,Math.max(7,end+1))});schedule();results()}if(act==='remove'){if(ST.activities.length>1){ST.activities.splice(+b.dataset.index,1);schedule();results()}}if(act==='vibe'){ST.vibe=b.dataset.vibe;ST.cluster=0;ST.variant=0;schedule();results()}if(act==='family'){ST.cluster=+b.dataset.index;ST.variant=0;slotSelection={};lastClusterKey='';results()}if(act==='previous'||act==='next'){const g=build()[ST.cluster];if(g)ST.variant=(ST.variant+(act==='next'?1:-1)+g.variants.length)%g.variants.length;results()}});
+document.addEventListener('click',e=>{if(state.page!=='stylist')return;const b=e.target.closest('[data-st]');if(!b)return;const act=b.dataset.st;if(act==='open-item'){openItemDetail(b.dataset.itemCode,'stylist','matches');return}if(act==='record-wear'){const list=currentOutfitCodes.map(code=>state.items.find(x=>x.item_code===code)).filter(Boolean);if(!list.length)return;for(const x of list)x.wear_count=Math.max(0,Number(x.wear_count)||0)+1;persist();const message=byid('st-wear-confirmation');if(message)message.textContent='Recorded +1 wear for '+list.length+' items.';return}if(act==='random-anchor'){randomAnchor();return}if(act==='clear-locks'){clearAllLocks();results();return}if(act==='cycle-slot'){cycleSlot(b.dataset.role,Number(b.dataset.step));return}if(act==='set-anchor'){toggleLock(b.dataset.role);return}if(act==='detect')detect();if(act==='search')searchLocation();if(act==='add'){const end=ST.activities.at(-1)?.end||17;ST.activities.push({type:'Daily',start:Math.max(6,Math.min(23,end)),end:Math.min(24,Math.max(7,end+1))});schedule();results()}if(act==='remove'){if(ST.activities.length>1){ST.activities.splice(+b.dataset.index,1);schedule();results()}}if(act==='vibe'){ST.vibe=b.dataset.vibe;ST.cluster=0;ST.variant=0;schedule();results()}if(act==='family'){ST.cluster=+b.dataset.index;ST.variant=0;slotSelection={};lastClusterKey='';results()}if(act==='previous'||act==='next'){const g=build()[ST.cluster];if(g)ST.variant=(ST.variant+(act==='next'?1:-1)+g.variants.length)%g.variants.length;results()}});
 document.addEventListener('change',e=>{if(state.page!=='stylist')return;const el=e.target;if(el.id==='st-date'){ST.date=el.value||defaultDate();ST.dateManual=true;const label=byid('st-date-label');if(label)label.textContent=dateLabel(ST.date);ST.weatherKey='';getWeather()}if(el.dataset.stWalkUnit!=null){const a=ST.activities[+el.dataset.stWalkUnit];walkingSteps(a);a.walkingUnit=el.value;schedule();return}if(el.dataset.stWalking!=null){setWalkingInput(el);return}if(el.dataset.stActivity!=null){const i=+el.dataset.stActivity;const k=el.dataset.key;ST.activities[i][k]=k==='type'?el.value:+el.value;if(ST.activities[i].end<=ST.activities[i].start){if(k==='start')ST.activities[i].start=ST.activities[i].end-1;else ST.activities[i].end=ST.activities[i].start+1}schedule();results()}});
 document.addEventListener('input',e=>{if(state.page==='stylist'&&e.target.dataset.stWalking!=null){setWalkingInput(e.target);return}if(state.page==='stylist'&&e.target.id==='st-location'){clearTimeout(locationTimer);locationTimer=setTimeout(()=>{if(byid('st-location')?.value.trim().length>=3)searchLocation()},600)}});
 document.addEventListener('keydown',e=>{if(state.page==='stylist'&&e.key==='Enter'&&e.target.id==='st-location'){e.preventDefault();clearTimeout(locationTimer);searchLocation()}});
