@@ -169,6 +169,7 @@ function buildUncached(){
  };
  const optionCode=item=>item?.item_code||NONE;
  const validityCache=new Map();
+ const minimumShoeWarmth=(homeOnly||noShoe)?0:(by.shoe.length?Math.min(...by.shoe.map(warmth)):Infinity);
  const permits=(items,candidate)=>!candidate||items.every(other=>!other||(
   trainerEligible(other,candidate)?pair(other,candidate):
   state.pairs[[other.item_code,candidate.item_code].sort().join('::')]!==false
@@ -187,6 +188,13 @@ function buildUncached(){
   const picked={};
   const selected=[];
   function dfs(index){
+   // A top/bottom combination already too warm with the lightest eligible shoe
+   // cannot become valid by adding shoes, coats or accessories.
+   if(index===2&&!homeOnly&&!noOuter&&temperatures.length){
+    const part=[picked.top,picked.bottom].filter(Boolean);
+    const lowerBound=effectiveWarmth(part.reduce((sum,g)=>sum+warmth(g),0)+minimumShoeWarmth);
+    if(temperatures.some(temp=>temp+lowerBound>77))return null;
+   }
    // Reject impossible core looks before exploring coats, bags or accessories.
    // Added layers only increase warmth, so an already-too-warm base cannot pass.
    if(index===3&&!homeOnly&&!noOuter&&temperatures.length){
