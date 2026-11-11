@@ -31,7 +31,7 @@ for (let x of items) {
   x._storage_path = path;
   x.image_path = data.publicUrl;
 }
-normalizeOccasions(items);state.items=items;state.pairs=pairs;state.category='All';state.subcategory='All';cloud.connected=true;cloud.ready=true;cloud.baselinePairs={...pairs};localStorage.setItem('wardrobe-sync-user',user.id);localStorage.removeItem('wardrobe-sync-pending');localStorage.setItem(KEY,JSON.stringify({items:state.items,pairs:state.pairs}));reportCloudCount(relationships.length,'saved');nav('wardrobe');message(`Loaded ${items.length} garments and ${Object.keys(pairs).length} decisions from Supabase. Auto-sync enabled.`)}
+normalizeOccasions(items);state.items=items;state.pairs=pairs;state.category='All';state.subcategory='All';cloud.connected=true;cloud.ready=true;cloud.baselinePairs={...pairs};localStorage.setItem('wardrobe-sync-user',user.id);localStorage.removeItem('wardrobe-sync-pending');localStorage.setItem(KEY,JSON.stringify({items:state.items,pairs:state.pairs}));reportCloudCount(relationships.length,'saved');render();message(`Loaded ${items.length} garments and ${Object.keys(pairs).length} decisions from Supabase. Auto-sync enabled.`)}
 
 // Auto-sync only after a deliberate cloud load/upload. This prevents stale browser data
 // from silently overwriting the cloud on sign-in.
