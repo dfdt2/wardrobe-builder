@@ -213,7 +213,7 @@ outerLoop: for(const base of bases)for(const shoe of (noShoe?[null]:homeOnly?[nu
 // One bounded pool of validated outfits, with optional choices spread across
 // base looks. Full compatibility and temperature checks still apply.
 // Randomized once per app load, but stable across repeated renders and slot cycling.
-// Every eligible outfit remains eligible; only presentation order changes.
+// All retained outfits passed validation; presentation order is randomized.
 const variants=[...unique.values()].sort((a,b)=>outfitOrderKey(a)-outfitOrderKey(b));
 return variants.length?[{id:'all-outfits',variants}]:[];
 }
