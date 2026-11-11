@@ -129,101 +129,149 @@ function validBaseOutfit(items,shoeOptional=false){
 const NONE='__NONE__';
 const OPTIONAL_ROLES=new Set(['outer','shoe','bag','scarf','hat','gloves']);
 const explicitlyNone=role=>lockedRoles.has(role)&&slotSelection[role]===NONE;
-function buildUncached(){
-const noShoe=explicitlyNone('shoe'),noOuter=explicitlyNone('outer'),noBag=explicitlyNone('bag');
-const by={top:[],bottom:[],shoe:[],outer:[],dress:[],bag:[],hat:[],scarf:[],gloves:[]};
-for(const x of state.items){let role=roleOf(x);if(role)by[role].push(x)}
-// Indoor Home is seasonally tempered, never filtered against outdoor weather.
-const month=Number(ST.date.slice(5,7));
-const indoorTemp=month===12||month<=2?65:month>=6&&month<=8?75:70;
-const homeOnly=ST.activities.length>0&&ST.activities.every(a=>a.type==='Home');
-const hours=scheduleHours();
-const temps=hours.map(h=>{
- const active=ST.activities.filter(a=>h>=a.start&&h<a.end);
- return active.length&&active.every(a=>a.type==='Home')?indoorTemp:ST.weather?.[h]?.temp;
-}).filter(Number.isFinite);
-const hottest=temps.length?Math.max(...temps):null,coldest=temps.length?Math.min(...temps):null;
-const accessoryThresholds={hat:40,scarf:60,gloves:50};
- const accessoryAvailable=role=>!homeOnly&&coldest!==null&&coldest<accessoryThresholds[role];
-// Exclude open-toed footwear if any scheduled hour is colder than 60°F.
-const excludeOpenToe=!homeOnly&&hours.some(h=>ST.activities.some(a=>a.type!=='Home'&&h>=a.start&&h<a.end)&&ST.weather?.[h]?.temp<60);
-const requiredWalkingSteps=ST.activities.reduce((n,a)=>n+walkingSteps(a),0);
- const eligibleShoes=by.shoe.filter(shoe=>(!excludeOpenToe||!['sandals','sandal heels'].includes(String(shoe.subcategory||'').trim().toLowerCase()))&&(requiredWalkingSteps===0||shoeComfortSteps(shoe)!==null&&shoeComfortSteps(shoe)>=requiredWalkingSteps));
-// Bound the number of fully expanded optional combinations. All base looks
-// are still checked; optional choices are sampled across looks rather than
-// materializing a potentially enormous Cartesian product on the UI thread.
-const MAX_OUTFIT_VARIANTS=6000;
-const MAX_VARIANTS_PER_BASE=12;
-const unique=new Map();
-const bases=[];
-for(const top of by.top)for(const bottom of by.bottom)if(pair(top,bottom))bases.push([top,bottom]);
-for(const dress of by.dress)bases.push([dress]);
-outerLoop: for(const base of bases)for(const shoe of (noShoe?[null]:homeOnly?[null,...eligibleShoes]:eligibleShoes)){
- if(unique.size>=MAX_OUTFIT_VARIANTS)break outerLoop;
- const required=shoe?[...base,shoe]:[...base];
- if(!validBaseOutfit(required,homeOnly||noShoe)||!compatibleSet(required))continue;
- // Every scheduled activity must be represented by at least one garment occasion.
- // Every required garment must carry every scheduled activity label.
- if(ST.activities.some(a=>required.some(g=>!hasOccasion(g,a.type))))continue;
- const baseTemp=effectiveWarmth(required.reduce((t,g)=>t+warmth(g),0));
- // A coat is optional, not mandatory to remove at the warmest hour.
- // At every scheduled hour, either the base outfit or the outfit with this coat
- // must satisfy the existing 72°F ±5°F comfort requirement. The coat may remain
- // on throughout the schedule, and a narrow range needs no layer changes.
- const layers=noOuter?[null]:[null,...by.outer.filter(o=>compatibleSet([...required,o]))];
- let baseVariantCount=0;
- // Rotate optional combinations across bases so a fixed cap does not
- // systematically favor the first coats and bags in wardrobe order.
- const offset=unique.size;
- const rotatedLayers=layers.length>1?[...layers.slice(offset%layers.length),...layers.slice(0,offset%layers.length)]:layers;
- layerLoop: for(const layer of rotatedLayers){
-   const garments=layer?[...required,layer]:required;
-   // Optional outerwear must satisfy the same activity restrictions.
-   if(ST.activities.some(a=>garments.some(g=>!hasOccasion(g,a.type))))continue;
-   // Validate after accessory selection rather than prematurely rejecting outfits.
-   const compatibleBags=by.bag.filter(bag=>
-     compatibleSet([...garments,bag])&&
-     !ST.activities.some(a=>!hasOccasion(bag,a.type))
-   );
-   const bagChoices=noBag?[null]:compatibleBags.length?compatibleBags:[null];
-   const bagOffset=bagChoices.length?offset%bagChoices.length:0;
-   for(const bag of [...bagChoices.slice(bagOffset),...bagChoices.slice(0,bagOffset)]){
-     const outfit=bag?[...garments,bag]:garments;
-     // Every selected cold-weather accessory contributes to total outfit warmth.
-     const accessoryOptions=['scarf','gloves','hat'].map(role=>[null,...(accessoryAvailable(role)?by[role].filter(a=>!hasOccasion(a,'Specialty')&&!ST.activities.some(act=>!hasOccasion(a,act.type))&&compatibleSet([...garments,a])):[])]);
-     for(const scarf of accessoryOptions[0])for(const gloves of accessoryOptions[1])for(const hat of accessoryOptions[2]){
-       const accessories=[scarf,gloves,hat].filter(Boolean);
-       if(!compatibleSet([...garments,...accessories]))continue;
-       const added=accessories.reduce((sum,g)=>sum+warmth(g),0);
-       const errors=temps.map(temp=>Math.min(
-         Math.abs(temp+baseTemp+added-72),
-         layer?Math.abs(temp+baseTemp+warmth(layer)+added-72):Infinity
-       ));
-       if(!homeOnly&&!noOuter&&errors.some(error=>error>5))continue;
-       const score=Math.max(0,100-Math.round((errors.length?errors.reduce((sum,e)=>sum+e,0)/errors.length:0)*4));
-       const variant={garments:[...outfit,...accessories],score,layer};
-       const key=variant.garments.map(g=>g.item_code).sort().join('::');
-       if(!unique.has(key)||unique.get(key).score<score)unique.set(key,variant);
-       baseVariantCount++;
-       if(baseVariantCount>=MAX_VARIANTS_PER_BASE||unique.size>=MAX_OUTFIT_VARIANTS)break layerLoop;
-     }
-   }
- }
-}
-// One bounded pool of validated outfits, with optional choices spread across
-// base looks. Full compatibility and temperature checks still apply.
-// Randomized once per app load, but stable across repeated renders and slot cycling.
-// All retained outfits passed validation; presentation order is randomized.
-const variants=[...unique.values()].sort((a,b)=>outfitOrderKey(a)-outfitOrderKey(b));
-return variants.length?[{id:'all-outfits',variants}]:[];
-}
-// Reuse the expensive fully validated outfit pool during carousel navigation.
-// Only data, weather/activity inputs, or explicit None locks affect eligibility.
-// Slot browsing and ordinary garment locks only filter the existing pool.
+// Indexed, on-demand constraint solver. It searches for one valid completion
+// of each visible garment choice, rather than materializing a Cartesian product.
+// The remaining combinations are still reachable by changing/locking slots.
 let outfitPoolCache=null;
 function invalidateOutfitPool(){outfitPoolCache=null;}
+function buildUncached(){
+ const noShoe=explicitlyNone('shoe'),noOuter=explicitlyNone('outer'),noBag=explicitlyNone('bag');
+ const homeOnly=ST.activities.length>0&&ST.activities.every(a=>a.type==='Home');
+ const month=Number(ST.date.slice(5,7));
+ const indoorTemp=month===12||month<=2?65:month>=6&&month<=8?75:70;
+ const hours=scheduleHours();
+ const temperatures=hours.map(h=>{
+  const activities=ST.activities.filter(a=>h>=a.start&&h<a.end);
+  return activities.length&&activities.every(a=>a.type==='Home')?indoorTemp:ST.weather?.[h]?.temp;
+ }).filter(Number.isFinite);
+ const coldest=temperatures.length?Math.min(...temperatures):null;
+ const accessoryThresholds={hat:40,scarf:60,gloves:50};
+ const requiredWalkingSteps=ST.activities.reduce((n,a)=>n+walkingSteps(a),0);
+ const excludeOpenToe=!homeOnly&&hours.some(h=>ST.activities.some(a=>a.type!=='Home'&&h>=a.start&&h<a.end)&&ST.weather?.[h]?.temp<60);
+ const by={top:[],bottom:[],dress:[],shoe:[],outer:[],bag:[],scarf:[],gloves:[],hat:[]};
+ for(const garment of state.items){
+  const role=roleOf(garment);
+  if(!role||ST.activities.some(a=>!hasOccasion(garment,a.type)))continue;
+  if(['hat','scarf','gloves'].includes(role)&&(homeOnly||coldest===null||coldest>=accessoryThresholds[role]||hasOccasion(garment,'Specialty')))continue;
+  if(role==='shoe'){
+   if(excludeOpenToe&&['sandals','sandal heels'].includes(String(garment.subcategory||'').trim().toLowerCase()))continue;
+   if(requiredWalkingSteps>0&&(shoeComfortSteps(garment)===null||shoeComfortSteps(garment)<requiredWalkingSteps))continue;
+  }
+  by[role].push(garment);
+ }
+ const roles=['top','bottom','shoe','outer','scarf','gloves','hat','bag'];
+ const allOptions={
+  top:[...by.top,...by.dress],bottom:[...by.bottom,null],
+  shoe:noShoe?[null]:homeOnly?[...by.shoe,null]:by.shoe,
+  outer:noOuter?[null]:[null,...by.outer],
+  scarf:[null,...by.scarf],gloves:[null,...by.gloves],hat:[null,...by.hat],
+  bag:noBag?[null]:[null,...by.bag]
+ };
+ const optionCode=item=>item?.item_code||NONE;
+ const validityCache=new Map();
+ const minimumShoeWarmth=(homeOnly||noShoe)?0:(by.shoe.length?Math.min(...by.shoe.map(warmth)):Infinity);
+ const permits=(items,candidate)=>!candidate||items.every(other=>!other||(
+  trainerEligible(other,candidate)?pair(other,candidate):
+  state.pairs[[other.item_code,candidate.item_code].sort().join('::')]!==false
+ ));
+ const variants=[];
+ const seen=new Set();
+ function findCompletion(forcedRole,forcedCode){
+  const fixed=new Map();
+  for(const role of lockedRoles){
+   const code=slotSelection[role];
+   if(code)fixed.set(role,code);
+  }
+  if(forcedRole)fixed.set(forcedRole,forcedCode);
+  const constraintKey=roles.map(role=>fixed.get(role)||'*').join('|');
+  if(validityCache.has(constraintKey))return validityCache.get(constraintKey);
+  const picked={};
+  const selected=[];
+  function dfs(index){
+   // A top/bottom combination already too warm with the lightest eligible shoe
+   // cannot become valid by adding shoes, coats or accessories.
+   if(index===2&&!homeOnly&&!noOuter&&temperatures.length){
+    const part=[picked.top,picked.bottom].filter(Boolean);
+    const lowerBound=effectiveWarmth(part.reduce((sum,g)=>sum+warmth(g),0)+minimumShoeWarmth);
+    if(temperatures.some(temp=>temp+lowerBound>77))return null;
+   }
+   // Reject impossible core looks before exploring coats, bags or accessories.
+   // Added layers only increase warmth, so an already-too-warm base cannot pass.
+   if(index===3&&!homeOnly&&!noOuter&&temperatures.length){
+    const baseTemp=effectiveWarmth([picked.top,picked.bottom,picked.shoe].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0));
+    if(temperatures.some(temp=>temp+baseTemp>77))return null;
+   }
+   // Temperature is independent of bag selection: don't enumerate bags for
+   // a base/layer/accessory combination that has already failed.
+   if(index===7&&!homeOnly&&!noOuter&&temperatures.length){
+    const baseTemp=effectiveWarmth([picked.top,picked.bottom,picked.shoe].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0));
+    const extra=['scarf','gloves','hat'].reduce((sum,role)=>sum+(picked[role]?warmth(picked[role]):0),0);
+    if(temperatures.some(temp=>Math.min(
+      Math.abs(temp+baseTemp+extra-72),
+      picked.outer?Math.abs(temp+baseTemp+extra+warmth(picked.outer)-72):Infinity
+    )>5))return null;
+   }
+   if(index===roles.length){
+    const base=[picked.top,picked.bottom,picked.shoe].filter(Boolean);
+    if(!validBaseOutfit(base,homeOnly||noShoe))return null;
+    const baseTemp=effectiveWarmth(base.reduce((sum,g)=>sum+warmth(g),0));
+    const accessoryWarmth=['scarf','gloves','hat'].reduce((sum,role)=>sum+(picked[role]?warmth(picked[role]):0),0);
+    const coat=picked.outer;
+    if(!homeOnly&&!noOuter&&temperatures.some(temp=>
+      Math.min(Math.abs(temp+baseTemp+accessoryWarmth-72),
+       coat?Math.abs(temp+baseTemp+accessoryWarmth+warmth(coat)-72):Infinity)>5
+    ))return null;
+    const errors=temperatures.map(temp=>Math.min(
+      Math.abs(temp+baseTemp+accessoryWarmth-72),
+      coat?Math.abs(temp+baseTemp+accessoryWarmth+warmth(coat)-72):Infinity
+    ));
+    const score=Math.max(0,100-Math.round((errors.length?errors.reduce((sum,e)=>sum+e,0)/errors.length:0)*4));
+    return {garments:selected.filter(Boolean).slice(),score,layer:coat||null};
+   }
+   const role=roles[index];
+   let choices=allOptions[role];
+   // Dresses are displayed in the top slot and do not have a separate bottom.
+   if(role==='bottom')choices=picked.top&&roleOf(picked.top)==='dress'?[null]:by.bottom;
+   if(role==='top'&&!choices.length)return null;
+   // Avoid optional-item searches for a missing required shoe.
+   if(role==='shoe'&&!choices.length)return null;
+   const forced=fixed.get(role);
+   if(forced!==undefined)choices=choices.filter(x=>optionCode(x)===forced);
+   for(const item of choices){
+    if(!permits(selected,item))continue;
+    picked[role]=item;
+    if(item)selected.push(item);
+    const found=dfs(index+1);
+    if(item)selected.pop();
+    if(found)return found;
+   }
+   return null;
+  }
+  const result=dfs(0);
+  validityCache.set(constraintKey,result);
+  return result;
+ }
+ function add(variant){
+  if(!variant)return;
+  const key=variant.garments.map(g=>g.item_code).sort().join('::');
+  if(!seen.has(key)){seen.add(key);variants.push(variant);}
+ }
+ // Include the current combination first where possible. One representative
+ // per valid garment choice suffices; cycle/lock searches the constraints again.
+ add(findCompletion(null,null));
+ for(const role of roles){
+  for(const item of allOptions[role]){
+   const code=optionCode(item);
+   if(role==='bottom'&&code===NONE)continue;
+   add(findCompletion(role,code));
+  }
+ }
+ variants.sort((a,b)=>outfitOrderKey(a)-outfitOrderKey(b));
+ return variants.length?[{id:'all-outfits',variants}]:[];
+}
 function build(){
- const key=conditionsKey()+'|'+Number(explicitlyNone('shoe'))+Number(explicitlyNone('outer'))+Number(explicitlyNone('bag'));
+ const locks=[...lockedRoles].sort().map(role=>[role,slotSelection[role]||'']).join('|');
+ const key=conditionsKey()+'|'+locks;
  if(outfitPoolCache&&outfitPoolCache.key===key&&outfitPoolCache.items===state.items&&outfitPoolCache.pairs===state.pairs)return outfitPoolCache.groups;
  const groups=buildUncached();
  outfitPoolCache={key,items:state.items,pairs:state.pairs,groups};
@@ -342,7 +390,7 @@ function results(){
    (current?'<button type="button" class="garment-s" data-st="open-item" data-item-code="'+E(current.item_code)+'" aria-label="View '+E(current.name)+' details" style="-webkit-touch-callout:none;touch-action:pan-y"><img draggable="false" style="-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;pointer-events:none" src="'+E(getimage(current))+'" alt="'+E(current.name)+'"><div class="name">'+E(current.name)+'</div></button>':'<div class="slot-empty">No '+(role==='bag'?'bag':role==='outer'?'jacket':labels[role].toLowerCase())+(role==='outer'&&noOuterWarning?'<div style="font-size:11px;line-height:1.35;color:#a65b21;margin-top:5px;font-weight:500">Temperature requirements not met</div>':'')+'</div>')+
    (!canCycle?'':'<div class="slot-controls"><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="-1" '+(!canCycle?'disabled':'')+' aria-label="Previous '+labels[role]+'">‹</button><small>'+(Math.max(0,index)+1)+' / '+count+'</small><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="1" '+(!canCycle?'disabled':'')+' aria-label="Next '+labels[role]+'">›</button></div>')+'</div>';
  }).join('');
- byid('st-outfit').innerHTML='<div class="stylist-slots">'+slots+'</div><p class="slot-foot">'+matching.length+' compatible complete outfit'+(matching.length===1?'':'s')+' · Hold an item to lock / unlock</p>'+'<div style="margin:16px 4px 5px"><button type="button" data-st="record-wear" class="primary" style="width:100%;padding:13px 16px">I’m wearing this</button><p class="small" id="st-wear-confirmation" role="status" style="margin:8px 0 0;text-align:center"></p></div>';
+ byid('st-outfit').innerHTML='<div class="stylist-slots">'+slots+'</div><p class="slot-foot">'+'Compatible garment choices · Hold an item to lock / unlock</p>'+'<div style="margin:16px 4px 5px"><button type="button" data-st="record-wear" class="primary" style="width:100%;padding:13px 16px">I’m wearing this</button><p class="small" id="st-wear-confirmation" role="status" style="margin:8px 0 0;text-align:center"></p></div>';
  const holder=byid('st-outfit');
  holder.querySelectorAll('[data-swipe-role]').forEach(el=>{
   let startX=0,startY=0,holdTimer=null,held=false;
@@ -373,7 +421,7 @@ function cycleSlot(role,step){
  if(code===NONE){if(!lockedRoles.has(role))previewNoneRoles.add(role);else previewNoneRoles.delete(role);results();return;}
  previewNoneRoles.delete(role);
  // If a lock is switched, preserve all other locks; update unlocked slots to a valid outfit.
- const matches=matchingLocks(g).filter(v=>selectedCode(v,role)===code);
+ const matches=matchingLocks(g,role).filter(v=>selectedCode(v,role)===code);
  if(!matches.length)return;
  const v=matches[0];
  for(const r of SLOT_ORDER)if(!lockedRoles.has(r))slotSelection[r]=selectedCode(v,r);
