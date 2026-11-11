@@ -188,6 +188,22 @@ function buildUncached(){
   const picked={};
   const selected=[];
   function dfs(index){
+   // Reject impossible core looks before exploring coats, bags or accessories.
+   // Added layers only increase warmth, so an already-too-warm base cannot pass.
+   if(index===3&&!homeOnly&&!noOuter&&temperatures.length){
+    const baseTemp=effectiveWarmth([picked.top,picked.bottom,picked.shoe].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0));
+    if(temperatures.some(temp=>temp+baseTemp>77))return null;
+   }
+   // Temperature is independent of bag selection: don't enumerate bags for
+   // a base/layer/accessory combination that has already failed.
+   if(index===7&&!homeOnly&&!noOuter&&temperatures.length){
+    const baseTemp=effectiveWarmth([picked.top,picked.bottom,picked.shoe].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0));
+    const extra=['scarf','gloves','hat'].reduce((sum,role)=>sum+(picked[role]?warmth(picked[role]):0),0);
+    if(temperatures.some(temp=>Math.min(
+      Math.abs(temp+baseTemp+extra-72),
+      picked.outer?Math.abs(temp+baseTemp+extra+warmth(picked.outer)-72):Infinity
+    )>5))return null;
+   }
    if(index===roles.length){
     const base=[picked.top,picked.bottom,picked.shoe].filter(Boolean);
     if(!validBaseOutfit(base,homeOnly||noShoe))return null;
