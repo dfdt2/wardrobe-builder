@@ -204,8 +204,19 @@ for(const candidate of candidates)for(const variant of candidate.variants){
  const key=variant.garments.map(g=>g.item_code).sort().join('::');
  if(!unique.has(key)||unique.get(key).score<variant.score)unique.set(key,variant);
 }
-const variants=[...unique.values()].sort((a,b)=>b.score-a.score);
+// Randomized once per app load, but stable across repeated renders and slot cycling.
+// Every eligible outfit remains eligible; only presentation order changes.
+const variants=[...unique.values()].sort((a,b)=>outfitOrderKey(a)-outfitOrderKey(b));
 return variants.length?[{id:'all-outfits',variants}]:[];
+}
+// Per-page randomized garment ordering: stable until refresh, independent of weather score.
+// Using garment identities rather than array indices avoids reordering during UI rerenders.
+const outfitOrderSeed=Math.floor(Math.random()*0xffffffff)>>>0;
+function outfitOrderKey(variant){
+ const key=variant.garments.map(g=>String(g.item_code)).sort().join('::');
+ let hash=(2166136261^outfitOrderSeed)>>>0;
+ for(let i=0;i<key.length;i++){hash=Math.imul(hash^key.charCodeAt(i),16777619)>>>0;}
+ return hash;
 }
 const SLOT_ORDER=['top','outer','bottom','shoe','bag','scarf','gloves','hat'];
 let slotSelection={};
