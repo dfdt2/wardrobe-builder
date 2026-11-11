@@ -129,7 +129,7 @@ function validBaseOutfit(items,shoeOptional=false){
 const NONE='__NONE__';
 const OPTIONAL_ROLES=new Set(['outer','shoe','bag','scarf','hat','gloves']);
 const explicitlyNone=role=>lockedRoles.has(role)&&slotSelection[role]===NONE;
-function build(){
+function buildUncached(){
 const noShoe=explicitlyNone('shoe'),noOuter=explicitlyNone('outer'),noBag=explicitlyNone('bag');
 const by={top:[],bottom:[],shoe:[],outer:[],dress:[],bag:[],hat:[],scarf:[],gloves:[]};
 for(const x of state.items){let role=roleOf(x);if(role)by[role].push(x)}
@@ -208,6 +208,18 @@ for(const candidate of candidates)for(const variant of candidate.variants){
 // Every eligible outfit remains eligible; only presentation order changes.
 const variants=[...unique.values()].sort((a,b)=>outfitOrderKey(a)-outfitOrderKey(b));
 return variants.length?[{id:'all-outfits',variants}]:[];
+}
+// Reuse the expensive fully validated outfit pool during carousel navigation.
+// Only data, weather/activity inputs, or explicit None locks affect eligibility.
+// Slot browsing and ordinary garment locks only filter the existing pool.
+let outfitPoolCache=null;
+function invalidateOutfitPool(){outfitPoolCache=null;}
+function build(){
+ const key=conditionsKey()+'|'+Number(explicitlyNone('shoe'))+Number(explicitlyNone('outer'))+Number(explicitlyNone('bag'));
+ if(outfitPoolCache&&outfitPoolCache.key===key&&outfitPoolCache.items===state.items&&outfitPoolCache.pairs===state.pairs)return outfitPoolCache.groups;
+ const groups=buildUncached();
+ outfitPoolCache={key,items:state.items,pairs:state.pairs,groups};
+ return groups;
 }
 // Per-page randomized garment ordering: stable until refresh, independent of weather score.
 // Using garment identities rather than array indices avoids reordering during UI rerenders.
@@ -363,7 +375,7 @@ function cycleSlot(role,step){
 async function getWeather(){if(ST.lat==null||ST.lon==null)return;const key=`${ST.lat},${ST.lon},${ST.date}`;if(ST.weatherKey===key&&ST.weather)return;ST.weather=null;ST.weatherMessage='Loading forecast…';forecast();try{const url=`https://api.open-meteo.com/v1/forecast?latitude=${ST.lat}&longitude=${ST.lon}&hourly=apparent_temperature,precipitation_probability,snowfall,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=16`;const res=await fetch(url);if(!res.ok)throw Error('Forecast service unavailable');const d=await res.json();const hours=Array.from({length:24},(_,h)=>{const idx=d.hourly.time.indexOf(`${ST.date}T${String(h).padStart(2,'0')}:00`);return idx<0?null:{temp:d.hourly.apparent_temperature[idx],rain:d.hourly.precipitation_probability[idx]??0,snow:d.hourly.snowfall[idx]??0,code:d.hourly.weather_code[idx]}});if(hours.every(x=>!x))throw Error('Forecast unavailable for this date (typically limited to the next 16 days)');ST.weather=hours;ST.weatherKey=key;ST.weatherMessage='';}catch(e){ST.weatherMessage=e.message;ST.weatherKey='';}forecast();results();}
 async function searchLocation(){let name=byid('st-location')?.value.trim();if(!name)return;ST.weatherMessage='Looking up location…';forecast();try{let r=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`);let d=await r.json();if(!d.results?.length)throw Error('Location not found');let c=d.results[0];ST.lat=c.latitude;ST.lon=c.longitude;ST.location=[c.name,c.admin1,c.country].filter(Boolean).join(', ');byid('st-location').value=ST.location;await getWeather()}catch(e){ST.weatherMessage=e.message;forecast()}}
 function detect(){if(!navigator.geolocation){ST.weatherMessage='Location permission unavailable';forecast();return}ST.weatherMessage='Detecting location…';forecast();navigator.geolocation.getCurrentPosition(async p=>{ST.lat=p.coords.latitude;ST.lon=p.coords.longitude;ST.location='Current location';if(byid('st-location'))byid('st-location').value=ST.location;try{let r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${ST.lat}&lon=${ST.lon}&format=json&zoom=10&addressdetails=1`);let j=await r.json();if(j.address){ST.location=[j.address.city||j.address.town||j.address.village||j.address.municipality||j.address.county,j.address.state].filter(Boolean).join(', ');if(byid('st-location'))byid('st-location').value=ST.location}}catch(e){}await getWeather()},()=>{ST.weatherMessage='Location access denied. Search for a city instead.';forecast()},{timeout:12000,maximumAge:600000})}
-window.renderStylist=function(m){if(!ST.dateManual)ST.date=defaultDate();setTitle("Stylist");m.innerHTML=body();schedule();forecast();results();if(!ST.geolocationTried){ST.geolocationTried=true;detect()}};
+window.renderStylist=function(m){invalidateOutfitPool();if(!ST.dateManual)ST.date=defaultDate();setTitle("Stylist");m.innerHTML=body();schedule();forecast();results();if(!ST.geolocationTried){ST.geolocationTried=true;detect()}};
 document.addEventListener('click',e=>{if(suppressAnchorClick){suppressAnchorClick=false;e.preventDefault();e.stopImmediatePropagation()}},true);
 document.addEventListener('click',e=>{if(state.page!=='stylist')return;const b=e.target.closest('[data-st]');if(!b)return;const act=b.dataset.st;if(act==='open-item'){openItemDetail(b.dataset.itemCode,'stylist','matches');return}if(act==='record-wear'){const list=currentOutfitCodes.map(code=>state.items.find(x=>x.item_code===code)).filter(Boolean);if(!list.length)return;for(const x of list)x.wear_count=Math.max(0,Number(x.wear_count)||0)+1;persist();const message=byid('st-wear-confirmation');if(message)message.textContent='Recorded +1 wear for '+list.length+' items.';return}if(act==='random-anchor'){randomAnchor();return}if(act==='clear-locks'){clearAllLocks();results();return}if(act==='cycle-slot'){cycleSlot(b.dataset.role,Number(b.dataset.step));return}if(act==='set-anchor'){toggleLock(b.dataset.role);return}if(act==='detect')detect();if(act==='search')searchLocation();if(act==='add'){ST.activities.push(defaultActivity('Daily'));schedule();results()}if(act==='remove'){if(ST.activities.length>1){ST.activities.splice(+b.dataset.index,1);schedule();results()}}if(act==='vibe'){ST.vibe=b.dataset.vibe;ST.cluster=0;ST.variant=0;schedule();results()}if(act==='family'){ST.cluster=+b.dataset.index;ST.variant=0;slotSelection={};lastClusterKey='';results()}if(act==='previous'||act==='next'){const g=build()[ST.cluster];if(g)ST.variant=(ST.variant+(act==='next'?1:-1)+g.variants.length)%g.variants.length;results()}});
 document.addEventListener('change',e=>{if(state.page!=='stylist')return;const el=e.target;if(el.id==='st-date'){ST.date=el.value||defaultDate();ST.dateManual=true;const label=byid('st-date-label');if(label)label.textContent=dateLabel(ST.date);ST.weatherKey='';getWeather()}if(el.dataset.stWalkUnit!=null){
