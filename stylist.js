@@ -149,12 +149,17 @@ const accessoryThresholds={hat:40,scarf:60,gloves:50};
 const excludeOpenToe=!homeOnly&&hours.some(h=>ST.activities.some(a=>a.type!=='Home'&&h>=a.start&&h<a.end)&&ST.weather?.[h]?.temp<60);
 const requiredWalkingSteps=ST.activities.reduce((n,a)=>n+walkingSteps(a),0);
  const eligibleShoes=by.shoe.filter(shoe=>(!excludeOpenToe||!['sandals','sandal heels'].includes(String(shoe.subcategory||'').trim().toLowerCase()))&&(requiredWalkingSteps===0||shoeComfortSteps(shoe)!==null&&shoeComfortSteps(shoe)>=requiredWalkingSteps));
-const categoryRank=x=>x.category==='Dresses'?0:1;
-let candidates=[];
+// Bound the number of fully expanded optional combinations. All base looks
+// are still checked; optional choices are sampled across looks rather than
+// materializing a potentially enormous Cartesian product on the UI thread.
+const MAX_OUTFIT_VARIANTS=6000;
+const MAX_VARIANTS_PER_BASE=12;
+const unique=new Map();
 const bases=[];
 for(const top of by.top)for(const bottom of by.bottom)if(pair(top,bottom))bases.push([top,bottom]);
 for(const dress of by.dress)bases.push([dress]);
-for(const base of bases)for(const shoe of (noShoe?[null]:homeOnly?[null,...eligibleShoes]:eligibleShoes)){
+outerLoop: for(const base of bases)for(const shoe of (noShoe?[null]:homeOnly?[null,...eligibleShoes]:eligibleShoes)){
+ if(unique.size>=MAX_OUTFIT_VARIANTS)break outerLoop;
  const required=shoe?[...base,shoe]:[...base];
  if(!validBaseOutfit(required,homeOnly||noShoe)||!compatibleSet(required))continue;
  // Every scheduled activity must be represented by at least one garment occasion.
@@ -166,8 +171,12 @@ for(const base of bases)for(const shoe of (noShoe?[null]:homeOnly?[null,...eligi
  // must satisfy the existing 72°F ±5°F comfort requirement. The coat may remain
  // on throughout the schedule, and a narrow range needs no layer changes.
  const layers=noOuter?[null]:[null,...by.outer.filter(o=>compatibleSet([...required,o]))];
- let variants=[];
- for(const layer of layers){
+ let baseVariantCount=0;
+ // Rotate optional combinations across bases so a fixed cap does not
+ // systematically favor the first coats and bags in wardrobe order.
+ const offset=unique.size;
+ const rotatedLayers=layers.length>1?[...layers.slice(offset%layers.length),...layers.slice(0,offset%layers.length)]:layers;
+ layerLoop: for(const layer of rotatedLayers){
    const garments=layer?[...required,layer]:required;
    // Optional outerwear must satisfy the same activity restrictions.
    if(ST.activities.some(a=>garments.some(g=>!hasOccasion(g,a.type))))continue;
@@ -176,7 +185,9 @@ for(const base of bases)for(const shoe of (noShoe?[null]:homeOnly?[null,...eligi
      compatibleSet([...garments,bag])&&
      !ST.activities.some(a=>!hasOccasion(bag,a.type))
    );
-   for(const bag of noBag?[null]:compatibleBags.length?compatibleBags:[null]){
+   const bagChoices=noBag?[null]:compatibleBags.length?compatibleBags:[null];
+   const bagOffset=bagChoices.length?offset%bagChoices.length:0;
+   for(const bag of [...bagChoices.slice(bagOffset),...bagChoices.slice(0,bagOffset)]){
      const outfit=bag?[...garments,bag]:garments;
      // Every selected cold-weather accessory contributes to total outfit warmth.
      const accessoryOptions=['scarf','gloves','hat'].map(role=>[null,...(accessoryAvailable(role)?by[role].filter(a=>!hasOccasion(a,'Specialty')&&!ST.activities.some(act=>!hasOccasion(a,act.type))&&compatibleSet([...garments,a])):[])]);
@@ -190,20 +201,17 @@ for(const base of bases)for(const shoe of (noShoe?[null]:homeOnly?[null,...eligi
        ));
        if(!homeOnly&&!noOuter&&errors.some(error=>error>5))continue;
        const score=Math.max(0,100-Math.round((errors.length?errors.reduce((sum,e)=>sum+e,0)/errors.length:0)*4));
-       variants.push({garments:[...outfit,...accessories],score,layer});
+       const variant={garments:[...outfit,...accessories],score,layer};
+       const key=variant.garments.map(g=>g.item_code).sort().join('::');
+       if(!unique.has(key)||unique.get(key).score<score)unique.set(key,variant);
+       baseVariantCount++;
+       if(baseVariantCount>=MAX_VARIANTS_PER_BASE||unique.size>=MAX_OUTFIT_VARIANTS)break layerLoop;
      }
    }
  }
- if(!variants.length)continue;
- variants.sort((a,b)=>b.score-a.score);
- candidates.push({base:required,variants,score:variants[0].score,id:required.map(x=>x.item_code).join('/'),rank:categoryRank(base[0])});
 }
-// One shared pool of fully validated outfits. Each garment slot can be browsed.
-const unique=new Map();
-for(const candidate of candidates)for(const variant of candidate.variants){
- const key=variant.garments.map(g=>g.item_code).sort().join('::');
- if(!unique.has(key)||unique.get(key).score<variant.score)unique.set(key,variant);
-}
+// One bounded pool of validated outfits, with optional choices spread across
+// base looks. Full compatibility and temperature checks still apply.
 // Randomized once per app load, but stable across repeated renders and slot cycling.
 // Every eligible outfit remains eligible; only presentation order changes.
 const variants=[...unique.values()].sort((a,b)=>outfitOrderKey(a)-outfitOrderKey(b));
