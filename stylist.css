@@ -176,8 +176,6 @@
 
 /* Outfit generation stays interruptible while schedule and forecast remain active. */
 .stylist .panel-s:has(#st-outfit){position:relative}
-.stylist .outfit-title-spinner-s:not([hidden]){display:block;position:absolute;top:19px;right:19px;width:17px;height:17px;border:2px solid #e6e6e6;border-top-color:#252525;border-radius:50%;animation:stylist-load-spin .7s linear infinite}
 .stylist .outfit-loading-s{display:flex;align-items:center;justify-content:center;gap:11px;min-height:145px;color:#777;font-size:13px}
 .stylist .outfit-loading-ring-s{width:19px;height:19px;border:2px solid #ddd;border-top-color:#333;border-radius:50%;animation:stylist-load-spin .7s linear infinite}
 @keyframes stylist-load-spin{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){.stylist .outfit-title-spinner-s,.stylist .outfit-loading-ring-s{animation-duration:2s}}
