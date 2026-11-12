@@ -116,6 +116,25 @@ function comfortError(temp,baseWarmth,extraWarmth=0,coatWarmth=0){
  const withCoat=coatWarmth>0?Math.abs(temp+baseWarmth+extraWarmth+coatWarmth-72):Infinity;
  return Math.min(without,withCoat);
 }
+// Evaluate removable layers separately at each scheduled hour. A scarf can
+// be worn alone; hats and gloves require the jacket to be worn that hour.
+// Every displayed garment is available for warmth when needed, but need not
+// stay on indoors or during a warmer part of the same schedule.
+function layeredComfortError(temp,base,coat=null,scarf=null,gloves=null,hat=null){
+ let best=Math.abs(temp+base-72);
+ const scarfWarmth=scarf?warmth(scarf):0;
+ if(scarf)best=Math.min(best,Math.abs(temp+base+scarfWarmth-72));
+ if(coat){
+  const coatBase=base+warmth(coat);
+  const extras=[scarf,gloves,hat].filter(Boolean);
+  for(let mask=0;mask<(1<<extras.length);mask++){
+   let added=0;
+   for(let i=0;i<extras.length;i++)if(mask&(1<<i))added+=warmth(extras[i]);
+   best=Math.min(best,Math.abs(temp+coatBase+added-72));
+  }
+ }
+ return best;
+}
 function scheduleHours(){const out=new Set();for(const a of ST.activities)for(let h=a.start;h<a.end;h++)out.add(h);return [...out].sort((a,b)=>a-b)}
 // Require approval only for relationships that the trainer offers for evaluation.
 // Use exactly the same trained relationship types as allPairs() in the
@@ -241,17 +260,12 @@ function* buildUncached(){
      return sum+(roleIndex<index?(picked[role]?warmth(picked[role]):0):roleWarmthMax[role]);
     },0);
     if(baseWarmth+extraWarmth< coldLimit-1e-8)return null;
-    // Already chosen scarf/gloves/hat insulation cannot be removed from this
-    // candidate. A mandatory accessory can make the outfit too warm.
-    const unavoidable=['scarf','gloves','hat'].reduce((sum,role)=>roles.indexOf(role)<index&&picked[role]?sum+warmth(picked[role]):sum,0);
-    if(temperatures.some(temp=>temp+baseWarmth+unavoidable>77))return null;
    }
    // Temperature is independent of bag selection: don't enumerate bags for
    // a base/layer/accessory combination that has already failed.
    if(index===7&&!homeOnly&&!noOuter&&temperatures.length){
     const baseWarmth=[picked.top,picked.bottom,picked.shoe].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0);
-    const extra=['scarf','gloves','hat'].reduce((sum,role)=>sum+(picked[role]?warmth(picked[role]):0),0);
-    if(temperatures.some(temp=>comfortError(temp,baseWarmth,extra,picked.outer?warmth(picked.outer):0)>5))return null;
+    if(temperatures.some(temp=>layeredComfortError(temp,baseWarmth,picked.outer,picked.scarf,picked.gloves,picked.hat)>5))return null;
    }
    if(index===roles.length){
     // Hats and gloves each require an actual jacket, including in locked looks.
@@ -261,7 +275,7 @@ function* buildUncached(){
     const baseWarmth=base.reduce((sum,g)=>sum+warmth(g),0);
     const accessoryWarmth=['scarf','gloves','hat'].reduce((sum,role)=>sum+(picked[role]?warmth(picked[role]):0),0);
     const coat=picked.outer;
-    const errors=temperatures.map(temp=>comfortError(temp,baseWarmth,accessoryWarmth,coat?warmth(coat):0));
+    const errors=temperatures.map(temp=>layeredComfortError(temp,baseWarmth,coat,picked.scarf,picked.gloves,picked.hat));
     if(!homeOnly&&!noOuter&&errors.some(error=>error>5))return null;
     const score=Math.max(0,100-Math.round((errors.length?errors.reduce((sum,e)=>sum+e,0)/errors.length:0)*4));
     return {garments:selected.filter(Boolean).slice(),score,layer:coat||null};
@@ -482,13 +496,13 @@ function results(){
  // Use the same direct sum of garment warmth for the displayed comfort range
  // and for eligibility at every scheduled hour.
  const comfortableTemperatures=[];
- for(let temp=-20;temp<=110;temp+=0.5)if(comfortError(temp,baseWarmth,accessoryWarmth,coat?warmth(coat):0)<=5)comfortableTemperatures.push(temp);
+ for(let temp=-20;temp<=110;temp+=0.5)if(layeredComfortError(temp,baseWarmth,coat,...['scarf','gloves','hat'].map(role=>displayedGarments.find(g=>roleOf(g)===role)||null))<=5)comfortableTemperatures.push(temp);
  const low=comfortableTemperatures.length?Math.round(comfortableTemperatures[0]):null;
  const high=comfortableTemperatures.length?Math.round(comfortableTemperatures[comfortableTemperatures.length-1]):null;
  byid('st-count').textContent=low===null?'Comfort range unavailable':'Comfort: '+low+'–'+high+'°F';
  byid('st-count').title='Estimated outdoor comfort range, using optional outerwear at colder temperatures (72°F target ±5°F).';
  const labels={top:'Top / dress',outer:'Jacket',bottom:'Pants / skirt',shoe:'Shoes',bag:'Bag',hat:'Hat',scarf:'Scarf',gloves:'Gloves'};
- const noOuterWarning=(explicitlyNone('outer')||previewNoneRoles.has('outer'))&&!ST.activities.every(a=>a.type==='Home')&&scheduleHours().some(h=>{const temp=ST.weather?.[h]?.temp;return Number.isFinite(temp)&&comfortError(temp,baseWarmth,accessoryWarmth,0)>5;});
+ const noOuterWarning=(explicitlyNone('outer')||previewNoneRoles.has('outer'))&&!ST.activities.every(a=>a.type==='Home')&&scheduleHours().some(h=>{const temp=ST.weather?.[h]?.temp;return Number.isFinite(temp)&&layeredComfortError(temp,baseWarmth,null,displayedGarments.find(g=>roleOf(g)==='scarf')||null)>5;});
  const slots=SLOT_ORDER.map(role=>{
   const possible=[...new Map(optionsForSlot(g,role).map(v=>{const item=garmentFor(v,role);return [item?.item_code||NONE,item]})).values()].sort((a,b)=>garmentOrderKey(role,a?.item_code||NONE)-garmentOrderKey(role,b?.item_code||NONE));
   if(OPTIONAL_ROLES.has(role)&&!possible.includes(null))possible.push(null);
