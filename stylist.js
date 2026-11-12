@@ -177,6 +177,10 @@ function* buildUncached(){
   scarf:[null,...by.scarf],gloves:[null,...by.gloves],hat:[null,...by.hat],
   bag:noBag?[null]:[null,...by.bag]
  };
+ // Shuffle each garment role independently before DFS. Otherwise the
+ // representative completion for every item is biased to the first garments
+ // in database order even when the final combinations are shuffled.
+ for(const role of roles)allOptions[role].sort((a,b)=>garmentOrderKey(role,a?.item_code||NONE)-garmentOrderKey(role,b?.item_code||NONE));
  const optionCode=item=>item?.item_code||NONE;
  const validityCache=new Map();
  const minimumShoeWarmth=(homeOnly||noShoe)?0:(by.shoe.length?Math.min(...by.shoe.map(warmth)):Infinity);
@@ -265,7 +269,7 @@ function* buildUncached(){
    const role=roles[index];
    let choices=allOptions[role];
    // Dresses are displayed in the top slot and do not have a separate bottom.
-   if(role==='bottom')choices=picked.top&&roleOf(picked.top)==='dress'?[null]:by.bottom;
+   if(role==='bottom')choices=picked.top&&roleOf(picked.top)==='dress'?[null]:allOptions.bottom.filter(Boolean);
    if(role==='top'&&!choices.length)return null;
    // Avoid optional-item searches for a missing required shoe.
    if(role==='shoe'&&!choices.length)return null;
@@ -366,6 +370,15 @@ function build(){
 // Per-page randomized garment ordering: stable until refresh, independent of weather score.
 // Using garment identities rather than array indices avoids reordering during UI rerenders.
 const outfitOrderSeed=Math.floor(Math.random()*0xffffffff)>>>0;
+function garmentOrderKey(role,code){
+ // Keep None at the end; independently shuffle each role's real garments
+ // once per browser load, not on each Stylist render or tab switch.
+ if(!code||code===NONE)return 0x100000000;
+ const key=role+'::'+code;
+ let hash=(2166136261^outfitOrderSeed)>>>0;
+ for(let i=0;i<key.length;i++)hash=Math.imul(hash^key.charCodeAt(i),16777619)>>>0;
+ return hash;
+}
 function outfitOrderKey(variant){
  const key=variant.garments.map(g=>String(g.item_code)).sort().join('::');
  let hash=(2166136261^outfitOrderSeed)>>>0;
@@ -477,7 +490,7 @@ function results(){
  const labels={top:'Top / dress',outer:'Jacket',bottom:'Pants / skirt',shoe:'Shoes',bag:'Bag',hat:'Hat',scarf:'Scarf',gloves:'Gloves'};
  const noOuterWarning=(explicitlyNone('outer')||previewNoneRoles.has('outer'))&&!ST.activities.every(a=>a.type==='Home')&&scheduleHours().some(h=>{const temp=ST.weather?.[h]?.temp;return Number.isFinite(temp)&&comfortError(temp,baseWarmth,accessoryWarmth,0)>5;});
  const slots=SLOT_ORDER.map(role=>{
-  const possible=[...new Map(optionsForSlot(g,role).map(v=>{const item=garmentFor(v,role);return [item?.item_code||NONE,item]})).values()];
+  const possible=[...new Map(optionsForSlot(g,role).map(v=>{const item=garmentFor(v,role);return [item?.item_code||NONE,item]})).values()].sort((a,b)=>garmentOrderKey(role,a?.item_code||NONE)-garmentOrderKey(role,b?.item_code||NONE));
   if(OPTIONAL_ROLES.has(role)&&!possible.includes(null))possible.push(null);
   const current=previewNoneRoles.has(role)||(jacketRemoved&&['hat','gloves'].includes(role))?null:garmentFor(chosen,role),code=current?.item_code||NONE;
   const index=possible.findIndex(x=>(x?.item_code||NONE)===code);
@@ -507,7 +520,7 @@ function results(){
 function cycleSlot(role,step){
  const g=build()?.[ST.cluster];if(!g)return;
  const variants=optionsForSlot(g,role);
- const options=[...new Set(variants.map(v=>selectedCode(v,role)))];
+ const options=[...new Set(variants.map(v=>selectedCode(v,role)))].sort((a,b)=>garmentOrderKey(role,a)-garmentOrderKey(role,b));
  if(OPTIONAL_ROLES.has(role)&&!options.includes(NONE))options.push(NONE);
  if(options.length<2)return;
  const current=slotSelection[role]||selectedCode(variants[0],role);
