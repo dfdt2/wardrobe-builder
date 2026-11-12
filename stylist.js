@@ -178,7 +178,7 @@ function* buildUncached(){
  // Safe upper bounds for remaining warmth. These are optimistic: ignoring
  // compatibility can only make the bound larger, never discard a valid outfit.
  const maxWarmth=role=>Math.max(0,...allOptions[role].filter(Boolean).map(warmth));
- const roleWarmthMax={outer:maxWarmth('outer'),scarf:maxWarmth('scarf'),gloves:maxWarmth('gloves'),hat:maxWarmth('hat')};
+ const roleWarmthMax={bottom:maxWarmth('bottom'),shoe:maxWarmth('shoe'),outer:maxWarmth('outer'),scarf:maxWarmth('scarf'),gloves:maxWarmth('gloves'),hat:maxWarmth('hat')};
  const coldLimit=temperatures.length?67-Math.min(...temperatures):null;
  const permits=(items,candidate)=>!candidate||items.every(other=>!other||(
   trainerEligible(other,candidate)?pair(other,candidate):
@@ -201,6 +201,15 @@ function* buildUncached(){
   function* dfs(index){
    // Yield periodically so time-slider, weather, and activity controls stay responsive.
    if(++explored%64===0)yield null;
+   // Skip an entire top or bottom branch when even the warmest eligible
+   // remaining garments cannot make it warm enough. Especially important
+   // for broad activity tags such as Date.
+   if(index>=1&&index<=2&&!homeOnly&&!noOuter&&coldLimit!==null){
+    const current=[picked.top,picked.bottom].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0);
+    const remaining=(index===1?roleWarmthMax.bottom:0)+roleWarmthMax.shoe+
+      roleWarmthMax.outer+roleWarmthMax.scarf+roleWarmthMax.gloves+roleWarmthMax.hat;
+    if(current+remaining<coldLimit-1e-8)return null;
+   }
    // A top/bottom combination already too warm with the lightest eligible shoe
    // cannot become valid by adding shoes, coats or accessories.
    if(index===2&&!homeOnly&&!noOuter&&temperatures.length){
