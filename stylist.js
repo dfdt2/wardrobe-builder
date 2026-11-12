@@ -124,7 +124,7 @@ function scheduleHours(){const out=new Set();for(const a of ST.activities)for(le
 const ROLE=(c,g)=>{const role=g?roleOf(g):c==='Tops'?'top':(['Pants','Skirts'].includes(c)?'bottom':c==='Shoes'?'shoe':c==='Outerwear'?'outer':c==='Bags'?'bag':c==='Dresses'?'dress':null);return role==='shoe'?'shoes':role;};
 const TRAINABLE=new Set(['bottom|top','bottom|shoes','bottom|outer','outer|top','dress|outer','dress|shoes','bag|top','bag|outer','bag|dress','hat|outer','gloves|outer','outer|scarf','hat|scarf','gloves|scarf','gloves|hat']);
 const trainedPairType=(a,b)=>{const x=ROLE(a.category,a),y=ROLE(b.category,b);return !!(x&&y&&TRAINABLE.has([x,y].sort().join('|')))};
-function trainerEligible(a,b){return trainedPairType(a,b)&&!hasOccasion(a,'Specialty')&&!hasOccasion(b,'Specialty')&&homePairAllowed(a,b)&&sharedPairActivity(a,b)}
+function trainerEligible(a,b){return trainedPairType(a,b)&&homePairAllowed(a,b)&&sharedTrainableActivity(a,b)}
 function validatedPair(a,b){const key=[a.item_code,b.item_code].sort().join('::');return trainedPairType(a,b)?trainerEligible(a,b)&&state.pairs[key]===true:state.pairs[key]!==false}
 function compatibleSet(items){return items.every((x,i)=>items.slice(i+1).every(y=>validatedPair(x,y)))}
 function hasOccasion(g,type){return (g.occasions||[]).some(o=>String(o).trim().toLowerCase()===String(type).trim().toLowerCase())}
@@ -162,7 +162,7 @@ function* buildUncached(){
  for(const garment of state.items){
   const role=roleOf(garment);
   if(!role||ST.activities.some(a=>!hasOccasion(garment,a.type)))continue;
-  if(['hat','scarf','gloves'].includes(role)&&(homeOnly||coldest===null||coldest>=accessoryThresholds[role]||hasOccasion(garment,'Specialty')))continue;
+  if(['hat','scarf','gloves'].includes(role)&&(homeOnly||coldest===null||coldest>=accessoryThresholds[role]))continue;
   if(role==='shoe'){
    if(excludeOpenToe&&['sandals','sandal heels'].includes(String(garment.subcategory||'').trim().toLowerCase()))continue;
    if(requiredWalkingSteps>0&&(shoeComfortSteps(garment)===null||shoeComfortSteps(garment)<requiredWalkingSteps))continue;
