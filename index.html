@@ -40,8 +40,8 @@ body.filter-open{overflow:hidden}
 .shell:has(.wardrobe-controls) .catbar{height:40px;gap:16px;align-items:stretch;padding:0 12px}
 .shell:has(.wardrobe-controls) .catbar button{font-size:14px;padding:7px 0 6px;border-bottom-width:2px}
 .shell:has(.wardrobe-controls) .subbar{height:38px;align-items:stretch;padding:0 12px;gap:12px}
-.shell:has(.wardrobe-controls) .subbar button{font-size:12px;padding:8px 0;flex:none;position:relative}
-.shell:has(.wardrobe-controls) .subbar button:not(:last-child):after{content:"";position:absolute;right:-10px;top:17px;height:13px;width:1px;background:#e7e8ee}
+.shell:has(.wardrobe-controls) .subbar button{font-size:12px;padding:0 4px;flex:none;position:relative;display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.2}
+.shell:has(.wardrobe-controls) .subbar button:not(:last-child):after{content:"";position:absolute;right:-7px;top:50%;transform:translateY(-50%);height:13px;width:1px;background:#e7e8ee}
 .wardrobe-grid .tile{padding:5px 8px 13px;display:flex;flex-direction:column;min-width:0;min-height:231px}
 .wardrobe-grid .tile figure{height:155px;width:100%;flex:none;margin:0 0 6px}
 .wardrobe-grid .tile img{width:96%;height:94%;object-fit:contain}
