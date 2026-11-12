@@ -110,7 +110,17 @@ function warmth(g){return estimatedClo(g)*25} // °F contribution is a heuristic
 // warmth values are relative adjustments, not insulation above bare skin.
 // Calibrated reference = 0.32 clo (8°F in this app's heuristic scale).
 const BASELINE_CLO_F=8;
-function effectiveWarmth(raw){return raw-BASELINE_CLO_F}
+// Winter calibration: the original fixed baseline made even insulated outfits fail
+// in the 30s–40s. Retain the strict 72 ± 5°F target, but account for the
+// extra effective insulation of a fully dressed winter outfit below 65°F.
+// This is a heuristic comfort calibration, not a physical clo conversion.
+function coldWeatherAdjustment(temp){return Math.max(0,Math.min(13,(65-temp)*1.3))}
+function effectiveWarmth(raw,temp){return raw-BASELINE_CLO_F+coldWeatherAdjustment(temp)}
+function comfortError(temp,baseWarmth,extraWarmth=0,coatWarmth=0){
+ const without=Math.abs(temp+effectiveWarmth(baseWarmth+extraWarmth,temp)-72);
+ const withCoat=coatWarmth>0?Math.abs(temp+effectiveWarmth(baseWarmth+extraWarmth+coatWarmth,temp)-72):Infinity;
+ return Math.min(without,withCoat);
+}
 function scheduleHours(){const out=new Set();for(const a of ST.activities)for(let h=a.start;h<a.end;h++)out.add(h);return [...out].sort((a,b)=>a-b)}
 // Require approval only for relationships that the trainer offers for evaluation.
 const ROLE=(c,g)=>g?roleOf(g):c==='Tops'?'top':(['Pants','Skirts'].includes(c)?'bottom':c==='Shoes'?'shoe':c==='Outerwear'?'outer':c==='Bags'?'bag':c==='Dresses'?'dress':null);
@@ -192,39 +202,30 @@ function buildUncached(){
    // cannot become valid by adding shoes, coats or accessories.
    if(index===2&&!homeOnly&&!noOuter&&temperatures.length){
     const part=[picked.top,picked.bottom].filter(Boolean);
-    const lowerBound=effectiveWarmth(part.reduce((sum,g)=>sum+warmth(g),0)+minimumShoeWarmth);
-    if(temperatures.some(temp=>temp+lowerBound>77))return null;
+    const lowerBound=part.reduce((sum,g)=>sum+warmth(g),0)+minimumShoeWarmth;
+    if(temperatures.some(temp=>temp+effectiveWarmth(lowerBound,temp)>77))return null;
    }
    // Reject impossible core looks before exploring coats, bags or accessories.
    // Added layers only increase warmth, so an already-too-warm base cannot pass.
    if(index===3&&!homeOnly&&!noOuter&&temperatures.length){
-    const baseTemp=effectiveWarmth([picked.top,picked.bottom,picked.shoe].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0));
-    if(temperatures.some(temp=>temp+baseTemp>77))return null;
+    const baseWarmth=[picked.top,picked.bottom,picked.shoe].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0);
+    if(temperatures.some(temp=>temp+effectiveWarmth(baseWarmth,temp)>77))return null;
    }
    // Temperature is independent of bag selection: don't enumerate bags for
    // a base/layer/accessory combination that has already failed.
    if(index===7&&!homeOnly&&!noOuter&&temperatures.length){
-    const baseTemp=effectiveWarmth([picked.top,picked.bottom,picked.shoe].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0));
+    const baseWarmth=[picked.top,picked.bottom,picked.shoe].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0);
     const extra=['scarf','gloves','hat'].reduce((sum,role)=>sum+(picked[role]?warmth(picked[role]):0),0);
-    if(temperatures.some(temp=>Math.min(
-      Math.abs(temp+baseTemp+extra-72),
-      picked.outer?Math.abs(temp+baseTemp+extra+warmth(picked.outer)-72):Infinity
-    )>5))return null;
+    if(temperatures.some(temp=>comfortError(temp,baseWarmth,extra,picked.outer?warmth(picked.outer):0)>5))return null;
    }
    if(index===roles.length){
     const base=[picked.top,picked.bottom,picked.shoe].filter(Boolean);
     if(!validBaseOutfit(base,homeOnly||noShoe))return null;
-    const baseTemp=effectiveWarmth(base.reduce((sum,g)=>sum+warmth(g),0));
+    const baseWarmth=base.reduce((sum,g)=>sum+warmth(g),0);
     const accessoryWarmth=['scarf','gloves','hat'].reduce((sum,role)=>sum+(picked[role]?warmth(picked[role]):0),0);
     const coat=picked.outer;
-    if(!homeOnly&&!noOuter&&temperatures.some(temp=>
-      Math.min(Math.abs(temp+baseTemp+accessoryWarmth-72),
-       coat?Math.abs(temp+baseTemp+accessoryWarmth+warmth(coat)-72):Infinity)>5
-    ))return null;
-    const errors=temperatures.map(temp=>Math.min(
-      Math.abs(temp+baseTemp+accessoryWarmth-72),
-      coat?Math.abs(temp+baseTemp+accessoryWarmth+warmth(coat)-72):Infinity
-    ));
+    const errors=temperatures.map(temp=>comfortError(temp,baseWarmth,accessoryWarmth,coat?warmth(coat):0));
+    if(!homeOnly&&!noOuter&&errors.some(error=>error>5))return null;
     const score=Math.max(0,100-Math.round((errors.length?errors.reduce((sum,e)=>sum+e,0)/errors.length:0)*4));
     return {garments:selected.filter(Boolean).slice(),score,layer:coat||null};
    }
@@ -353,9 +354,7 @@ function results(){
  const g=groups[ST.cluster];
  if(!g){
   currentOutfitCodes=[];
-  const nonDefault=ST.activities.some(a=>{const d=defaultActivity(a.type);return a.start!==d.start||a.end!==d.end});
-  byid('st-outfit').innerHTML='<div class="empty-s">No matching outfits.<p style="margin-top:10px">'+E(emptyReason())+'</p>'+
-   (nonDefault?'<button type="button" class="tiny" data-st="reset-hours" style="margin-top:14px">Reset activity hours to defaults</button>':'')+'</div>';
+  byid('st-outfit').innerHTML='<div class="empty-s">No matching outfits.<p style="margin-top:10px">'+E(emptyReason())+'</p></div>';
   return;
  }
  if(lastClusterKey!==g.id){
@@ -380,13 +379,16 @@ function results(){
  const coat=displayedGarments.find(g=>group(g.category)==='outer');
  const baseWarmth=baseGarments.reduce((sum,g)=>sum+warmth(g),0);
  const accessoryWarmth=displayedGarments.filter(g=>['scarf','gloves','hat'].includes(roleOf(g))).reduce((sum,g)=>sum+warmth(g),0);
- const layeredWarmth=baseWarmth+(coat?warmth(coat):0)+accessoryWarmth-BASELINE_CLO_F;
- const adjustedBaseWarmth=baseWarmth-BASELINE_CLO_F;
- const low=Math.round(67-layeredWarmth),high=Math.round(77-adjustedBaseWarmth);
- byid('st-count').textContent='Comfort: '+low+'–'+high+'°F';
+ // Determine displayed comfort range using the same calibrated temperature rule
+ // that validates the outfit, so the label and the recommendations agree.
+ const comfortableTemperatures=[];
+ for(let temp=-20;temp<=110;temp+=0.5)if(comfortError(temp,baseWarmth,accessoryWarmth,coat?warmth(coat):0)<=5)comfortableTemperatures.push(temp);
+ const low=comfortableTemperatures.length?Math.round(comfortableTemperatures[0]):null;
+ const high=comfortableTemperatures.length?Math.round(comfortableTemperatures[comfortableTemperatures.length-1]):null;
+ byid('st-count').textContent=low===null?'Comfort range unavailable':'Comfort: '+low+'–'+high+'°F';
  byid('st-count').title='Estimated outdoor comfort range, using optional outerwear at colder temperatures (72°F target ±5°F).';
  const labels={top:'Top / dress',outer:'Jacket',bottom:'Pants / skirt',shoe:'Shoes',bag:'Bag',hat:'Hat',scarf:'Scarf',gloves:'Gloves'};
- const noOuterWarning=(explicitlyNone('outer')||previewNoneRoles.has('outer'))&&!ST.activities.every(a=>a.type==='Home')&&scheduleHours().some(h=>{const temp=ST.weather?.[h]?.temp;return Number.isFinite(temp)&&Math.abs(temp+adjustedBaseWarmth+accessoryWarmth-72)>5;});
+ const noOuterWarning=(explicitlyNone('outer')||previewNoneRoles.has('outer'))&&!ST.activities.every(a=>a.type==='Home')&&scheduleHours().some(h=>{const temp=ST.weather?.[h]?.temp;return Number.isFinite(temp)&&comfortError(temp,baseWarmth,accessoryWarmth,0)>5;});
  const slots=SLOT_ORDER.map(role=>{
   const possible=[...new Map(optionsForSlot(g,role).map(v=>{const item=garmentFor(v,role);return [item?.item_code||NONE,item]})).values()];
   if(OPTIONAL_ROLES.has(role)&&!possible.includes(null))possible.push(null);
@@ -441,7 +443,7 @@ async function searchLocation(){let name=byid('st-location')?.value.trim();if(!n
 function detect(){if(!navigator.geolocation){ST.weatherMessage='Location permission unavailable';forecast();return}ST.weatherMessage='Detecting location…';forecast();navigator.geolocation.getCurrentPosition(async p=>{ST.lat=p.coords.latitude;ST.lon=p.coords.longitude;ST.location='Current location';if(byid('st-location'))byid('st-location').value=ST.location;try{let r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${ST.lat}&lon=${ST.lon}&format=json&zoom=10&addressdetails=1`);let j=await r.json();if(j.address){ST.location=[j.address.city||j.address.town||j.address.village||j.address.municipality||j.address.county,j.address.state].filter(Boolean).join(', ');if(byid('st-location'))byid('st-location').value=ST.location}}catch(e){}await getWeather()},()=>{ST.weatherMessage='Location access denied. Search for a city instead.';forecast()},{timeout:12000,maximumAge:600000})}
 window.renderStylist=function(m){invalidateOutfitPool();if(!ST.dateManual)ST.date=defaultDate();setTitle("Stylist");m.innerHTML=body();schedule();forecast();results();if(!ST.geolocationTried){ST.geolocationTried=true;detect()}};
 document.addEventListener('click',e=>{if(suppressAnchorClick){suppressAnchorClick=false;e.preventDefault();e.stopImmediatePropagation()}},true);
-document.addEventListener('click',e=>{if(state.page!=='stylist')return;const b=e.target.closest('[data-st]');if(!b)return;const act=b.dataset.st;if(act==='open-item'){openItemDetail(b.dataset.itemCode,'stylist','matches');return}if(act==='record-wear'){const list=currentOutfitCodes.map(code=>state.items.find(x=>x.item_code===code)).filter(Boolean);if(!list.length)return;for(const x of list)x.wear_count=Math.max(0,Number(x.wear_count)||0)+1;persist();const message=byid('st-wear-confirmation');if(message)message.textContent='Recorded +1 wear for '+list.length+' items.';return}if(act==='random-anchor'){randomAnchor();return}if(act==='clear-locks'){clearAllLocks();results();return}if(act==='reset-hours'){ST.activities=ST.activities.map(a=>({...a,...defaultActivity(a.type)}));schedule();forecast();results();return}if(act==='cycle-slot'){cycleSlot(b.dataset.role,Number(b.dataset.step));return}if(act==='set-anchor'){toggleLock(b.dataset.role);return}if(act==='detect')detect();if(act==='search')searchLocation();if(act==='add'){ST.activities.push(defaultActivity('Daily'));schedule();results()}if(act==='remove'){if(ST.activities.length>1){ST.activities.splice(+b.dataset.index,1);schedule();results()}}if(act==='vibe'){ST.vibe=b.dataset.vibe;ST.cluster=0;ST.variant=0;schedule();results()}if(act==='family'){ST.cluster=+b.dataset.index;ST.variant=0;slotSelection={};lastClusterKey='';results()}if(act==='previous'||act==='next'){const g=build()[ST.cluster];if(g)ST.variant=(ST.variant+(act==='next'?1:-1)+g.variants.length)%g.variants.length;results()}});
+document.addEventListener('click',e=>{if(state.page!=='stylist')return;const b=e.target.closest('[data-st]');if(!b)return;const act=b.dataset.st;if(act==='open-item'){openItemDetail(b.dataset.itemCode,'stylist','matches');return}if(act==='record-wear'){const list=currentOutfitCodes.map(code=>state.items.find(x=>x.item_code===code)).filter(Boolean);if(!list.length)return;for(const x of list)x.wear_count=Math.max(0,Number(x.wear_count)||0)+1;persist();const message=byid('st-wear-confirmation');if(message)message.textContent='Recorded +1 wear for '+list.length+' items.';return}if(act==='random-anchor'){randomAnchor();return}if(act==='clear-locks'){clearAllLocks();results();return} if(act==='cycle-slot'){cycleSlot(b.dataset.role,Number(b.dataset.step));return}if(act==='set-anchor'){toggleLock(b.dataset.role);return}if(act==='detect')detect();if(act==='search')searchLocation();if(act==='add'){ST.activities.push(defaultActivity('Daily'));schedule();results()}if(act==='remove'){if(ST.activities.length>1){ST.activities.splice(+b.dataset.index,1);schedule();results()}}if(act==='vibe'){ST.vibe=b.dataset.vibe;ST.cluster=0;ST.variant=0;schedule();results()}if(act==='family'){ST.cluster=+b.dataset.index;ST.variant=0;slotSelection={};lastClusterKey='';results()}if(act==='previous'||act==='next'){const g=build()[ST.cluster];if(g)ST.variant=(ST.variant+(act==='next'?1:-1)+g.variants.length)%g.variants.length;results()}});
 document.addEventListener('change',e=>{if(state.page!=='stylist')return;const el=e.target;if(el.id==='st-date'){ST.date=el.value||defaultDate();ST.dateManual=true;const label=byid('st-date-label');if(label)label.textContent=dateLabel(ST.date);ST.weatherKey='';getWeather()}if(el.dataset.stWalkUnit!=null){
  const i=+el.dataset.stWalkUnit,a=ST.activities[i];if(!a)return;
  const steps=walkingSteps(a);a.walkingUnit=el.value;
