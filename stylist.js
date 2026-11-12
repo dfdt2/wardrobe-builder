@@ -175,6 +175,11 @@ function* buildUncached(){
  const optionCode=item=>item?.item_code||NONE;
  const validityCache=new Map();
  const minimumShoeWarmth=(homeOnly||noShoe)?0:(by.shoe.length?Math.min(...by.shoe.map(warmth)):Infinity);
+ // Safe upper bounds for remaining warmth. These are optimistic: ignoring
+ // compatibility can only make the bound larger, never discard a valid outfit.
+ const maxWarmth=role=>Math.max(0,...allOptions[role].filter(Boolean).map(warmth));
+ const roleWarmthMax={outer:maxWarmth('outer'),scarf:maxWarmth('scarf'),gloves:maxWarmth('gloves'),hat:maxWarmth('hat')};
+ const coldLimit=temperatures.length?67-Math.min(...temperatures):null;
  const permits=(items,candidate)=>!candidate||items.every(other=>!other||(
   trainerEligible(other,candidate)?pair(other,candidate):
   state.pairs[[other.item_code,candidate.item_code].sort().join('::')]!==false
@@ -209,6 +214,23 @@ function* buildUncached(){
     const baseWarmth=[picked.top,picked.bottom,picked.shoe].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0);
     if(temperatures.some(temp=>temp+effectiveWarmth(baseWarmth)>77))return null;
    }
+   // Prune a partial outfit as soon as even its warmest possible completion
+   // cannot reach 67°F at the coldest scheduled hour. This avoids exhaustive
+   // Date-activity searches over coats, scarves, hats, gloves, and bags.
+   // For each future optional role, assume the warmest possible garment;
+   // hence the bound is conservative and cannot reject a valid completion.
+   if(index>=3&&index<=7&&!homeOnly&&!noOuter&&coldLimit!==null){
+    const baseWarmth=[picked.top,picked.bottom,picked.shoe].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0);
+    const extraWarmth=['outer','scarf','gloves','hat'].reduce((sum,role)=>{
+     const roleIndex=roles.indexOf(role);
+     return sum+(roleIndex<index?(picked[role]?warmth(picked[role]):0):roleWarmthMax[role]);
+    },0);
+    if(baseWarmth+extraWarmth< coldLimit-1e-8)return null;
+    // Already chosen scarf/gloves/hat insulation cannot be removed from this
+    // candidate. A mandatory accessory can make the outfit too warm.
+    const unavoidable=['scarf','gloves','hat'].reduce((sum,role)=>roles.indexOf(role)<index&&picked[role]?sum+warmth(picked[role]):sum,0);
+    if(temperatures.some(temp=>temp+baseWarmth+unavoidable>77))return null;
+   }
    // Temperature is independent of bag selection: don't enumerate bags for
    // a base/layer/accessory combination that has already failed.
    if(index===7&&!homeOnly&&!noOuter&&temperatures.length){
@@ -237,7 +259,7 @@ function* buildUncached(){
    // Avoid optional-item searches for a missing required shoe.
    if(role==='shoe'&&!choices.length)return null;
    // A no-jacket look cannot acquire gloves or a hat.
-   if(!picked.outer&&(role==='gloves'||role==='hat'))choices=choices.filter(x=>!x);
+   if(!picked.outer&&(role==='gloves'||role==='hat'))choices=[null];
    const forced=fixed.get(role);
    if(forced!==undefined)choices=choices.filter(x=>optionCode(x)===forced);
    for(const item of choices){
