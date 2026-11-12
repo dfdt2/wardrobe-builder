@@ -27,7 +27,7 @@ function body(){
   <div class="small" id="st-weather-msg" role="status" style="display:none"></div><div id="st-forecast" class="forecast-s"></div></section>
   <section class="panel-s"><h2>Schedule</h2><div id="st-activities"></div><button class="tiny" data-st="add">+ Add activity</button></section>
 
-  </div><div><section class="panel-s"><div class="line-s"><h2>Outfit recommendation</h2><div class="outfit-actions-s"><span class="small" id="st-count"></span><span id="st-loading" class="outfit-title-spinner-s" role="status" aria-label="Loading outfit recommendations" hidden></span><button type="button" class="random-outfit-s" data-st="clear-locks" aria-label="Unlock all selected garments">Clear locks</button><button type="button" class="random-outfit-s" data-st="random-anchor" aria-label="Choose a random eligible garment as anchor">Random</button></div></div><div id="st-outfit"></div></section></div></div></section>`;
+  </div><div><section class="panel-s"><div class="line-s"><h2>Outfit recommendation</h2><div class="outfit-actions-s"><span class="small" id="st-count"></span><button type="button" class="random-outfit-s" data-st="clear-locks" aria-label="Unlock all selected garments">Clear locks</button><button type="button" class="random-outfit-s" data-st="random-anchor" aria-label="Choose a random eligible garment as anchor">Random</button></div></div><div id="st-outfit"></div></section></div></div></section>`;
 }
 function weatherTheme(w){if(!w)return 'neutral';if([95,96,99].includes(w.code))return 'storm';if(w.snow>0||[71,73,75,77,85,86].includes(w.code))return 'snow';if([51,53,55,61,63,65,80,81,82].includes(w.code)||w.rain>=70)return 'rain';if([0,1].includes(w.code))return 'sunny';if(w.code===2)return 'partly';return 'cloudy'}
 function weatherSymbol(w,h){const theme=weatherTheme(w);if(theme==='storm')return '⛈';if(theme==='snow')return '❄';if(theme==='rain')return '☂';if(theme==='cloudy')return '☁';if(theme==='partly')return '⛅';return h<6||h>=20?'☾':'☀'}
@@ -284,8 +284,6 @@ function outfitKey(){
  return conditionsKey()+'|'+locks;
 }
 function showOutfitLoading(){
- const spinner=byid('st-loading');
- if(spinner)spinner.hidden=false;
  const slot=byid('st-outfit');
  if(slot)slot.innerHTML='<div class="outfit-loading-s" role="status" aria-live="polite"><span class="outfit-loading-ring-s" aria-hidden="true"></span><span>Finding matching outfits…</span></div>';
  if(byid('st-count'))byid('st-count').textContent='';
@@ -315,14 +313,10 @@ function queueOutfitJob(key){
    if(outfitJob!==job||outfitKey()!==key||state.items!==job.items||state.pairs!==job.pairs)return;
    outfitPoolCache={key,items:job.items,pairs:job.pairs,groups:value.value};
    outfitJob=null;
-   const spinner=byid('st-loading');
-   if(spinner)spinner.hidden=true;
    if(state.page==='stylist')results();
   }catch(error){
    if(outfitJob!==job)return;
    outfitJob=null;
-   const spinner=byid('st-loading');
-   if(spinner)spinner.hidden=true;
    const slot=byid('st-outfit');
    if(slot)slot.textContent='Unable to generate outfits. Try changing the schedule.';
    console.error('Outfit generation failed',error);
