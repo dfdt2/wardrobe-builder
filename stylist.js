@@ -117,9 +117,12 @@ const BASELINE_CLO_F=8;
 function coldWeatherAdjustment(temp){return Math.max(0,Math.min(13,(65-temp)*1.3))}
 function effectiveWarmth(raw,temp){return raw-BASELINE_CLO_F+coldWeatherAdjustment(temp)}
 function comfortError(temp,baseWarmth,extraWarmth=0,coatWarmth=0){
- const without=Math.abs(temp+effectiveWarmth(baseWarmth+extraWarmth,temp)-72);
- const withCoat=coatWarmth>0?Math.abs(temp+effectiveWarmth(baseWarmth+extraWarmth+coatWarmth,temp)-72):Infinity;
- return Math.min(without,withCoat);
+ // A coat is adjustable in practice (unzipped, open, or removed). The
+ // effective insulation therefore ranges from no coat to full coat, rather
+ // than forcing an all-or-nothing thermal jump at intermediate temperatures.
+ const without=temp+effectiveWarmth(baseWarmth+extraWarmth,temp);
+ const withCoat=temp+effectiveWarmth(baseWarmth+extraWarmth+Math.max(0,coatWarmth),temp);
+ return without>72?without-72:withCoat<72?72-withCoat:0;
 }
 function scheduleHours(){const out=new Set();for(const a of ST.activities)for(let h=a.start;h<a.end;h++)out.add(h);return [...out].sort((a,b)=>a-b)}
 // Require approval only for relationships that the trainer offers for evaluation.
