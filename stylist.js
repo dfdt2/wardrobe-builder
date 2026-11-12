@@ -106,23 +106,15 @@ function group(name){const n=String(name||'').toLowerCase();if(n==='tops'||n==='
 function accessoryRole(g){if(g.category!=='Other')return null;return ({Hats:'hat',Scarves:'scarf',Gloves:'gloves'})[g.subcategory]||null}
 function roleOf(g){return accessoryRole(g)||group(g.category)}
 function warmth(g){return estimatedClo(g)*25} // °F contribution is a heuristic, not a physical conversion
-// The 72°F target already assumes ordinary indoor clothing. The garment-specific
-// warmth values are relative adjustments, not insulation above bare skin.
-// Calibrated reference = 0.32 clo (8°F in this app's heuristic scale).
-const BASELINE_CLO_F=8;
-// Winter calibration: the original fixed baseline made even insulated outfits fail
-// in the 30s–40s. Retain the strict 72 ± 5°F target, but account for the
-// extra effective insulation of a fully dressed winter outfit below 65°F.
-// This is a heuristic comfort calibration, not a physical clo conversion.
-function coldWeatherAdjustment(temp){return Math.max(0,Math.min(13,(65-temp)*1.3))}
-function effectiveWarmth(raw,temp){return raw-BASELINE_CLO_F+coldWeatherAdjustment(temp)}
+// Each garment contributes its full estimated warmth directly.
+// Estimated comfort temperature = 72°F - sum(garment warmth).
+// A coat may be worn or removed across scheduled hours; no fractional
+// insulation, fixed baseline subtraction, or temperature-dependent bonus.
+function effectiveWarmth(raw){return raw}
 function comfortError(temp,baseWarmth,extraWarmth=0,coatWarmth=0){
- // A coat is adjustable in practice (unzipped, open, or removed). The
- // effective insulation therefore ranges from no coat to full coat, rather
- // than forcing an all-or-nothing thermal jump at intermediate temperatures.
- const without=temp+effectiveWarmth(baseWarmth+extraWarmth,temp);
- const withCoat=temp+effectiveWarmth(baseWarmth+extraWarmth+Math.max(0,coatWarmth),temp);
- return without>72?without-72:withCoat<72?72-withCoat:0;
+ const without=Math.abs(temp+baseWarmth+extraWarmth-72);
+ const withCoat=coatWarmth>0?Math.abs(temp+baseWarmth+extraWarmth+coatWarmth-72):Infinity;
+ return Math.min(without,withCoat);
 }
 function scheduleHours(){const out=new Set();for(const a of ST.activities)for(let h=a.start;h<a.end;h++)out.add(h);return [...out].sort((a,b)=>a-b)}
 // Require approval only for relationships that the trainer offers for evaluation.
@@ -206,13 +198,13 @@ function buildUncached(){
    if(index===2&&!homeOnly&&!noOuter&&temperatures.length){
     const part=[picked.top,picked.bottom].filter(Boolean);
     const lowerBound=part.reduce((sum,g)=>sum+warmth(g),0)+minimumShoeWarmth;
-    if(temperatures.some(temp=>temp+effectiveWarmth(lowerBound,temp)>77))return null;
+    if(temperatures.some(temp=>temp+effectiveWarmth(lowerBound)>77))return null;
    }
    // Reject impossible core looks before exploring coats, bags or accessories.
    // Added layers only increase warmth, so an already-too-warm base cannot pass.
    if(index===3&&!homeOnly&&!noOuter&&temperatures.length){
     const baseWarmth=[picked.top,picked.bottom,picked.shoe].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0);
-    if(temperatures.some(temp=>temp+effectiveWarmth(baseWarmth,temp)>77))return null;
+    if(temperatures.some(temp=>temp+effectiveWarmth(baseWarmth)>77))return null;
    }
    // Temperature is independent of bag selection: don't enumerate bags for
    // a base/layer/accessory combination that has already failed.
@@ -382,8 +374,8 @@ function results(){
  const coat=displayedGarments.find(g=>group(g.category)==='outer');
  const baseWarmth=baseGarments.reduce((sum,g)=>sum+warmth(g),0);
  const accessoryWarmth=displayedGarments.filter(g=>['scarf','gloves','hat'].includes(roleOf(g))).reduce((sum,g)=>sum+warmth(g),0);
- // Determine displayed comfort range using the same calibrated temperature rule
- // that validates the outfit, so the label and the recommendations agree.
+ // Use the same direct sum of garment warmth for the displayed comfort range
+ // and for eligibility at every scheduled hour.
  const comfortableTemperatures=[];
  for(let temp=-20;temp<=110;temp+=0.5)if(comfortError(temp,baseWarmth,accessoryWarmth,coat?warmth(coat):0)<=5)comfortableTemperatures.push(temp);
  const low=comfortableTemperatures.length?Math.round(comfortableTemperatures[0]):null;
