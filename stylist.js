@@ -118,10 +118,15 @@ function comfortError(temp,baseWarmth,extraWarmth=0,coatWarmth=0){
 }
 function scheduleHours(){const out=new Set();for(const a of ST.activities)for(let h=a.start;h<a.end;h++)out.add(h);return [...out].sort((a,b)=>a-b)}
 // Require approval only for relationships that the trainer offers for evaluation.
-const ROLE=(c,g)=>g?roleOf(g):c==='Tops'?'top':(['Pants','Skirts'].includes(c)?'bottom':c==='Shoes'?'shoe':c==='Outerwear'?'outer':c==='Bags'?'bag':c==='Dresses'?'dress':null);
-const TRAINABLE=new Set(['bottom|top','bottom|shoe','bottom|outer','outer|top','dress|outer','dress|shoe','bag|top','bag|outer','bag|dress','hat|outer','gloves|outer','outer|scarf','hat|scarf','gloves|scarf','gloves|hat']);
-function trainerEligible(a,b){const x=ROLE(a.category,a),y=ROLE(b.category,b);return !!(x&&y&&!hasOccasion(a,'Specialty')&&!hasOccasion(b,'Specialty')&&TRAINABLE.has([x,y].sort().join('|')))}
-function compatibleSet(items){return items.every((x,i)=>items.slice(i+1).every(y=>(trainerEligible(x,y)?pair(x,y):state.pairs[[x.item_code,y.item_code].sort().join('::')]!==false)))}
+// Use exactly the same trained relationship types as allPairs() in the
+// compatibility trainer. A missing, excluded, or unreviewed trained pair is
+// never an implicit approval.
+const ROLE=(c,g)=>{const role=g?roleOf(g):c==='Tops'?'top':(['Pants','Skirts'].includes(c)?'bottom':c==='Shoes'?'shoe':c==='Outerwear'?'outer':c==='Bags'?'bag':c==='Dresses'?'dress':null);return role==='shoe'?'shoes':role;};
+const TRAINABLE=new Set(['bottom|top','bottom|shoes','bottom|outer','outer|top','dress|outer','dress|shoes','bag|top','bag|outer','bag|dress','hat|outer','gloves|outer','outer|scarf','hat|scarf','gloves|scarf','gloves|hat']);
+const trainedPairType=(a,b)=>{const x=ROLE(a.category,a),y=ROLE(b.category,b);return !!(x&&y&&TRAINABLE.has([x,y].sort().join('|')))};
+function trainerEligible(a,b){return trainedPairType(a,b)&&!hasOccasion(a,'Specialty')&&!hasOccasion(b,'Specialty')&&homePairAllowed(a,b)&&sharedPairActivity(a,b)}
+function validatedPair(a,b){const key=[a.item_code,b.item_code].sort().join('::');return trainedPairType(a,b)?trainerEligible(a,b)&&state.pairs[key]===true:state.pairs[key]!==false}
+function compatibleSet(items){return items.every((x,i)=>items.slice(i+1).every(y=>validatedPair(x,y)))}
 function hasOccasion(g,type){return (g.occasions||[]).some(o=>String(o).trim().toLowerCase()===String(type).trim().toLowerCase())}
 // A complete base outfit is either top + pants/skirt + shoes, or dress + shoes.
 // Outerwear is an optional variation and never substitutes for a required item.
@@ -180,10 +185,7 @@ function* buildUncached(){
  const maxWarmth=role=>Math.max(0,...allOptions[role].filter(Boolean).map(warmth));
  const roleWarmthMax={bottom:maxWarmth('bottom'),shoe:maxWarmth('shoe'),outer:maxWarmth('outer'),scarf:maxWarmth('scarf'),gloves:maxWarmth('gloves'),hat:maxWarmth('hat')};
  const coldLimit=temperatures.length?67-Math.min(...temperatures):null;
- const permits=(items,candidate)=>!candidate||items.every(other=>!other||(
-  trainerEligible(other,candidate)?pair(other,candidate):
-  state.pairs[[other.item_code,candidate.item_code].sort().join('::')]!==false
- ));
+ const permits=(items,candidate)=>!candidate||items.every(other=>!other||validatedPair(other,candidate));
  const variants=[];
  const seen=new Set();
  let explored=0;
