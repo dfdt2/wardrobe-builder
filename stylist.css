@@ -195,3 +195,10 @@
 .stylist .excluded-items-s{display:flex;flex-wrap:wrap;gap:7px}
 .stylist button.excluded-chip-s{background:#f6f6f6;border:1px solid #dedede;border-radius:16px;padding:7px 10px;color:#555;font-size:12px;max-width:100%;overflow-wrap:anywhere}
 .stylist button.excluded-chip-s span{margin-left:6px;font-size:14px}
+
+/* Layered top/dress composite: two independently identifiable photos in one frame. */
+.stylist .layer-composite-s{position:relative;width:100%;height:170px;display:block;overflow:hidden;border-radius:9px;background:#f7f7f7}
+.stylist .layer-composite-s img{position:absolute!important;width:72%!important;height:90%!important;object-fit:contain!important;top:5%;border-radius:7px;background:#fff;box-shadow:0 2px 8px #00000013;pointer-events:none}
+.stylist .layer-composite-s .layer-base-s{left:1%;transform:rotate(-5deg);z-index:1}
+.stylist .layer-composite-s .layer-outer-s{right:1%;transform:rotate(5deg);z-index:2}
+@media(max-width:550px){.stylist .layer-composite-s{height:145px}}
