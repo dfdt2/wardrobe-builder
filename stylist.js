@@ -270,8 +270,8 @@ function* buildUncached(){
    if(index===7&&!homeOnly&&!noOuter&&temperatures.length){
     const baseWarmth=[picked.top,picked.bottom,picked.shoe].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0);
     const fullWarmth=baseWarmth+['outer','scarf','gloves','hat'].reduce((sum,role)=>sum+(picked[role]?warmth(picked[role]):0),0);
-    if(Math.abs(coldest+fullWarmth-75)>5)return null;
-    if(layeredComfortError(warmest,baseWarmth,picked.outer,picked.scarf,picked.gloves,picked.hat)>5)return null;
+    if(Math.abs(coldest+fullWarmth-75)>2.5)return null;
+    if(layeredComfortError(warmest,baseWarmth,picked.outer,picked.scarf,picked.gloves,picked.hat)>2.5)return null;
    }
    if(index===roles.length){
     // Hats and gloves each require an actual jacket, including in locked looks.
@@ -284,7 +284,7 @@ function* buildUncached(){
     // Check only extrema: all garments at minimum, any permitted subset at maximum.
     const fullWarmth=baseWarmth+(coat?warmth(coat):0)+accessoryWarmth;
     const errors=temperatures.length?[Math.abs(coldest+fullWarmth-75),layeredComfortError(warmest,baseWarmth,coat,picked.scarf,picked.gloves,picked.hat)]:[];
-    if(!homeOnly&&!noOuter&&errors.some(error=>error>5))return null;
+    if(!homeOnly&&!noOuter&&errors.some(error=>error>2.5))return null;
     const score=Math.max(0,100-Math.round((errors.length?errors.reduce((sum,e)=>sum+e,0)/errors.length:0)*4));
     return {garments:selected.filter(Boolean).slice(),score,layer:coat||null};
    }
@@ -465,7 +465,7 @@ function emptyReason(){
  const temperatures=hours.map(h=>ST.weather?.[h]?.temp).filter(Number.isFinite);
  const context=temperatures.length?' Scheduled temperatures: '+Math.round(Math.min(...temperatures))+'–'+Math.round(Math.max(...temperatures))+'°F.':' Weather data unavailable for the selected hours.';
  if(!combos)return 'No approved top + bottom + shoe combinations meet the selected activity tags. Check that cloud decisions have finished loading.'+context;
- return combos+' approved complete combinations meet your activity tags, but none pass the remaining temperature/layer requirements.'+context+' The ±5°F comfort constraint is still enforced.';
+ return combos+' approved complete combinations meet your activity tags, but none pass the remaining temperature/layer requirements.'+context+' The ±2.5°F comfort constraint is still enforced.';
 }
 function results(){
  if(!byid('st-outfit'))return;
@@ -510,9 +510,9 @@ function results(){
  const fullLow=Math.round(70-fullWarmth),fullHigh=Math.round(80-fullWarmth);
  const warmLimit=Math.round(80-baseWarmth);
  byid('st-count').textContent='All layers: '+fullLow+'–'+fullHigh+'°F';
- byid('st-count').title='Coldest forecast must fit the all-layers range; warmest forecast must fit at least one removable-layer combination (75°F ±5°F).';
+ byid('st-count').title='Coldest forecast must fit the all-layers range; warmest forecast must fit at least one removable-layer combination (75°F ±2.5°F).';
  const labels={top:'Top / dress',outer:'Jacket',bottom:'Pants / skirt',shoe:'Shoes',bag:'Bag',hat:'Hat',scarf:'Scarf',gloves:'Gloves'};
- const noOuterWarning=(explicitlyNone('outer')||previewNoneRoles.has('outer'))&&!ST.activities.every(a=>a.type==='Home')&&scheduleHours().some(h=>{const temp=ST.weather?.[h]?.temp;return Number.isFinite(temp)&&layeredComfortError(temp,baseWarmth,null,displayedGarments.find(g=>roleOf(g)==='scarf')||null)>5;});
+ const noOuterWarning=(explicitlyNone('outer')||previewNoneRoles.has('outer'))&&!ST.activities.every(a=>a.type==='Home')&&scheduleHours().some(h=>{const temp=ST.weather?.[h]?.temp;return Number.isFinite(temp)&&layeredComfortError(temp,baseWarmth,null,displayedGarments.find(g=>roleOf(g)==='scarf')||null)>2.5;});
  const slots=SLOT_ORDER.map(role=>{
   const possible=[...new Map(optionsForSlot(g,role).map(v=>{const item=garmentFor(v,role);return [item?.item_code||NONE,item]})).values()].sort((a,b)=>garmentOrderKey(role,a?.item_code||NONE)-garmentOrderKey(role,b?.item_code||NONE));
   if(OPTIONAL_ROLES.has(role)&&!possible.includes(null))possible.push(null);
