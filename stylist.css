@@ -202,3 +202,5 @@
 .stylist .layer-composite-s .layer-base-s{left:1%;transform:rotate(-5deg);z-index:1}
 .stylist .layer-composite-s .layer-outer-s{right:1%;transform:rotate(5deg);z-index:2}
 @media(max-width:550px){.stylist .layer-composite-s{height:145px}}
+
+.stylist .stylist-flag-badge{position:absolute;top:3px;left:4px;z-index:5;display:grid;place-items:center;width:23px;height:23px;border-radius:50%;background:#c82936;color:#fff;font-size:17px;font-weight:800;line-height:1;box-shadow:0 1px 3px #0003;pointer-events:none}
