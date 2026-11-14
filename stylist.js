@@ -110,13 +110,13 @@ function accessoryRole(g){if(g.category!=='Other')return null;return ({Hats:'hat
 function roleOf(g){return accessoryRole(g)||group(g.category)}
 function warmth(g){return estimatedClo(g)*25} // °F contribution is a heuristic, not a physical conversion
 // Each garment contributes its full estimated warmth directly.
-// Estimated comfort temperature = 72°F - sum(garment warmth).
+// Estimated comfort temperature = 75°F - sum(garment warmth).
 // A coat may be worn or removed across scheduled hours; no fractional
 // insulation, fixed baseline subtraction, or temperature-dependent bonus.
 function effectiveWarmth(raw){return raw}
 function comfortError(temp,baseWarmth,extraWarmth=0,coatWarmth=0){
- const without=Math.abs(temp+baseWarmth+extraWarmth-72);
- const withCoat=coatWarmth>0?Math.abs(temp+baseWarmth+extraWarmth+coatWarmth-72):Infinity;
+ const without=Math.abs(temp+baseWarmth+extraWarmth-75);
+ const withCoat=coatWarmth>0?Math.abs(temp+baseWarmth+extraWarmth+coatWarmth-75):Infinity;
  return Math.min(without,withCoat);
 }
 // Evaluate removable layers separately at each scheduled hour. A scarf can
@@ -124,16 +124,16 @@ function comfortError(temp,baseWarmth,extraWarmth=0,coatWarmth=0){
 // Every displayed garment is available for warmth when needed, but need not
 // stay on indoors or during a warmer part of the same schedule.
 function layeredComfortError(temp,base,coat=null,scarf=null,gloves=null,hat=null){
- let best=Math.abs(temp+base-72);
+ let best=Math.abs(temp+base-75);
  const scarfWarmth=scarf?warmth(scarf):0;
- if(scarf)best=Math.min(best,Math.abs(temp+base+scarfWarmth-72));
+ if(scarf)best=Math.min(best,Math.abs(temp+base+scarfWarmth-75));
  if(coat){
   const coatBase=base+warmth(coat);
   const extras=[scarf,gloves,hat].filter(Boolean);
   for(let mask=0;mask<(1<<extras.length);mask++){
    let added=0;
    for(let i=0;i<extras.length;i++)if(mask&(1<<i))added+=warmth(extras[i]);
-   best=Math.min(best,Math.abs(temp+coatBase+added-72));
+   best=Math.min(best,Math.abs(temp+coatBase+added-75));
   }
  }
  return best;
@@ -211,7 +211,7 @@ function* buildUncached(){
  // compatibility can only make the bound larger, never discard a valid outfit.
  const maxWarmth=role=>Math.max(0,...allOptions[role].filter(Boolean).map(warmth));
  const roleWarmthMax={bottom:maxWarmth('bottom'),shoe:maxWarmth('shoe'),outer:maxWarmth('outer'),scarf:maxWarmth('scarf'),gloves:maxWarmth('gloves'),hat:maxWarmth('hat')};
- const coldLimit=temperatures.length?67-Math.min(...temperatures):null;
+ const coldLimit=temperatures.length?70-Math.min(...temperatures):null;
  const permits=(items,candidate)=>!candidate||items.every(other=>!other||validatedPair(other,candidate));
  const variants=[];
  const seen=new Set();
@@ -244,16 +244,16 @@ function* buildUncached(){
    if(index===2&&!homeOnly&&!noOuter&&temperatures.length){
     const part=[picked.top,picked.bottom].filter(Boolean);
     const lowerBound=part.reduce((sum,g)=>sum+warmth(g),0)+minimumShoeWarmth;
-    if(warmest+effectiveWarmth(lowerBound)>77)return null;
+    if(warmest+effectiveWarmth(lowerBound)>80)return null;
    }
    // Reject impossible core looks before exploring coats, bags or accessories.
    // Added layers only increase warmth, so an already-too-warm base cannot pass.
    if(index===3&&!homeOnly&&!noOuter&&temperatures.length){
     const baseWarmth=[picked.top,picked.bottom,picked.shoe].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0);
-    if(warmest+effectiveWarmth(baseWarmth)>77)return null;
+    if(warmest+effectiveWarmth(baseWarmth)>80)return null;
    }
    // Prune a partial outfit as soon as even its warmest possible completion
-   // cannot reach 67°F at the coldest scheduled hour. This avoids exhaustive
+   // cannot reach 70°F at the coldest scheduled hour. This avoids exhaustive
    // Date-activity searches over coats, scarves, hats, gloves, and bags.
    // For each future optional role, assume the warmest possible garment;
    // hence the bound is conservative and cannot reject a valid completion.
@@ -270,7 +270,7 @@ function* buildUncached(){
    if(index===7&&!homeOnly&&!noOuter&&temperatures.length){
     const baseWarmth=[picked.top,picked.bottom,picked.shoe].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0);
     const fullWarmth=baseWarmth+['outer','scarf','gloves','hat'].reduce((sum,role)=>sum+(picked[role]?warmth(picked[role]):0),0);
-    if(Math.abs(coldest+fullWarmth-72)>5)return null;
+    if(Math.abs(coldest+fullWarmth-75)>5)return null;
     if(layeredComfortError(warmest,baseWarmth,picked.outer,picked.scarf,picked.gloves,picked.hat)>5)return null;
    }
    if(index===roles.length){
@@ -283,7 +283,7 @@ function* buildUncached(){
     const coat=picked.outer;
     // Check only extrema: all garments at minimum, any permitted subset at maximum.
     const fullWarmth=baseWarmth+(coat?warmth(coat):0)+accessoryWarmth;
-    const errors=temperatures.length?[Math.abs(coldest+fullWarmth-72),layeredComfortError(warmest,baseWarmth,coat,picked.scarf,picked.gloves,picked.hat)]:[];
+    const errors=temperatures.length?[Math.abs(coldest+fullWarmth-75),layeredComfortError(warmest,baseWarmth,coat,picked.scarf,picked.gloves,picked.hat)]:[];
     if(!homeOnly&&!noOuter&&errors.some(error=>error>5))return null;
     const score=Math.max(0,100-Math.round((errors.length?errors.reduce((sum,e)=>sum+e,0)/errors.length:0)*4));
     return {garments:selected.filter(Boolean).slice(),score,layer:coat||null};
@@ -507,10 +507,10 @@ function results(){
  const accessoryWarmth=displayedGarments.filter(g=>['scarf','gloves','hat'].includes(roleOf(g))).reduce((sum,g)=>sum+warmth(g),0);
  // Show mandatory full-layer range separately from warm-end layering limit.
  const fullWarmth=baseWarmth+(coat?warmth(coat):0)+accessoryWarmth;
- const fullLow=Math.round(67-fullWarmth),fullHigh=Math.round(77-fullWarmth);
- const warmLimit=Math.round(77-baseWarmth);
+ const fullLow=Math.round(70-fullWarmth),fullHigh=Math.round(80-fullWarmth);
+ const warmLimit=Math.round(80-baseWarmth);
  byid('st-count').textContent='All layers: '+fullLow+'–'+fullHigh+'°F';
- byid('st-count').title='Coldest forecast must fit the all-layers range; warmest forecast must fit at least one removable-layer combination (72°F ±5°F).';
+ byid('st-count').title='Coldest forecast must fit the all-layers range; warmest forecast must fit at least one removable-layer combination (75°F ±5°F).';
  const labels={top:'Top / dress',outer:'Jacket',bottom:'Pants / skirt',shoe:'Shoes',bag:'Bag',hat:'Hat',scarf:'Scarf',gloves:'Gloves'};
  const noOuterWarning=(explicitlyNone('outer')||previewNoneRoles.has('outer'))&&!ST.activities.every(a=>a.type==='Home')&&scheduleHours().some(h=>{const temp=ST.weather?.[h]?.temp;return Number.isFinite(temp)&&layeredComfortError(temp,baseWarmth,null,displayedGarments.find(g=>roleOf(g)==='scarf')||null)>5;});
  const slots=SLOT_ORDER.map(role=>{
