@@ -517,12 +517,17 @@ function results(){
  const coat=displayedGarments.find(g=>group(g.category)==='outer');
  const baseWarmth=baseGarments.reduce((sum,g)=>sum+warmth(g),0);
  const accessoryWarmth=displayedGarments.filter(g=>['scarf','gloves','hat'].includes(roleOf(g))).reduce((sum,g)=>sum+warmth(g),0);
- // Show mandatory full-layer range separately from warm-end layering limit.
+ // The outfit's usable temperature envelope includes removable layers:
+ // cold end = all garments worn; warm end = the mandatory base after
+ // removing outerwear, accessories and any removable overshirt.
+ // Hats/gloves can only be worn with the jacket; removing all of them
+ // is always a valid configuration. A dress remains part of the base.
  const fullWarmth=baseWarmth+(coat?warmth(coat):0)+accessoryWarmth;
- const fullLow=Math.round(70-fullWarmth),fullHigh=Math.round(80-fullWarmth);
- const warmLimit=Math.round(80-(baseWarmth-(garmentFor(chosen,'top')?.layerOuter?warmth(garmentFor(chosen,'top').layerOuter):0)));
- byid('st-count').textContent='All layers: '+fullLow+'–'+fullHigh+'°F';
- byid('st-count').title='Coldest forecast must fit the all-layers range; warmest forecast must fit at least one removable-layer combination (75°F ±2.5°F).';
+ const removableTopWarmth=garmentFor(chosen,'top')?.layerOuter?warmth(garmentFor(chosen,'top').layerOuter):0;
+ const minimumWarmth=baseWarmth-removableTopWarmth;
+ const fullLow=Math.round(67-fullWarmth),fullHigh=Math.round(77-minimumWarmth);
+ byid('st-count').textContent='Adjustable range: '+fullLow+'–'+fullHigh+'°F';
+ byid('st-count').title='Full outfit with every layer at the cold end; mandatory base with optional layers removed at the warm end (67–77°F comfort envelope). Outfit eligibility may use a stricter comfort target.';
  const labels={top:'Top / dress',outer:'Jacket',bottom:'Pants / skirt',shoe:'Shoes',bag:'Bag',hat:'Hat',scarf:'Scarf',gloves:'Gloves',belt:'Belt'};
  const noOuterWarning=(explicitlyNone('outer')||previewNoneRoles.has('outer'))&&!ST.activities.every(a=>a.type==='Home')&&scheduleHours().some(h=>{const temp=ST.weather?.[h]?.temp;return Number.isFinite(temp)&&layeredComfortError(temp,baseWarmth,null,displayedGarments.find(g=>roleOf(g)==='scarf')||null)>2.5;});
  const slots=SLOT_ORDER.map(role=>{
