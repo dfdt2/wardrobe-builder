@@ -7,7 +7,7 @@ const ACTIVITY_DEFAULT_TIMES={
  Home:[18,24],Party:[20,24],Dressy:[20,24],
  Sport:[8,20],Specialty:[8,20]
 };
-const defaultActivity=(type='Daily')=>{const [start,end]=ACTIVITY_DEFAULT_TIMES[type]||[8,17];return {type,start,end};};
+const defaultActivity=(type='Daily')=>{const [start,end]=ACTIVITY_DEFAULT_TIMES[type]||[8,17];return {type,start,end,timeCustomized:false};};
 const VIBES=['Casual','Minimal','Polished','Sporty','Romantic','Edgy'];
 const iso=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
 const defaultDate=()=>{const d=new Date();if(d.getHours()>=21)d.setDate(d.getDate()+1);return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
@@ -97,7 +97,7 @@ function setWalkingInput(el){
 }
 
 function paintTimeRange(i){const bar=document.querySelector('[data-time-range="'+i+'"]');const a=ST.activities[i];if(!bar||!a)return;bar.style.setProperty('--start',a.start/24*100+'%');bar.style.setProperty('--end',a.end/24*100+'%');const row=bar.closest('.activity-s');row.querySelector('[data-time="start"]').textContent=time(a.start);row.querySelector('[data-time="end"]').textContent=time(a.end);for(const key of ['start','end']){const h=bar.querySelector('[data-range-handle="'+key+'"]');h.style.left=a[key]/24*100+'%';h.setAttribute('aria-valuenow',a[key]);h.setAttribute('aria-valuetext',time(a[key]));h.setAttribute('aria-valuemin',key==='start'?0:a.start+1);h.setAttribute('aria-valuemax',key==='start'?a.end-1:24)}}
-function moveTimeHandle(i,key,value){const a=ST.activities[i];if(!a)return;const h=Math.round(Math.max(0,Math.min(24,value)));a[key]=key==='start'?Math.min(h,a.end-1):Math.max(h,a.start+1);paintTimeRange(i);forecast();}
+function moveTimeHandle(i,key,value){const a=ST.activities[i];if(!a)return;const h=Math.round(Math.max(0,Math.min(24,value)));const next=key==='start'?Math.min(h,a.end-1):Math.max(h,a.start+1);if(next!==a[key]){a[key]=next;a.timeCustomized=true;}paintTimeRange(i);forecast();}
 let activeTimeDrag=null;
 document.addEventListener('pointerdown',e=>{if(state.page!=='stylist')return;const bar=e.target.closest('[data-time-range]');if(!bar)return;const i=Number(bar.dataset.timeRange),a=ST.activities[i],rect=bar.getBoundingClientRect();if(!a||!rect.width)return;const h=Math.max(0,Math.min(24,(e.clientX-rect.left)/rect.width*24));const explicit=e.target.closest('[data-range-handle]')?.dataset.rangeHandle;const key=explicit||(Math.abs(h-a.start)<=Math.abs(h-a.end)?'start':'end');activeTimeDrag={id:e.pointerId,i,key,bar};bar.setPointerCapture(e.pointerId);moveTimeHandle(i,key,h);e.preventDefault()});
 document.addEventListener('pointermove',e=>{const d=activeTimeDrag;if(!d||e.pointerId!==d.id)return;const rect=d.bar.getBoundingClientRect();if(rect.width)moveTimeHandle(d.i,d.key,(e.clientX-rect.left)/rect.width*24)});
@@ -579,10 +579,11 @@ document.addEventListener('change',e=>{if(state.page!=='stylist')return;const el
  if(!a)return;
  if(k==='type'){
   const defaults=defaultActivity(el.value);
-  a.type=defaults.type;a.start=defaults.start;a.end=defaults.end;
+  a.type=defaults.type;if(!a.timeCustomized){a.start=defaults.start;a.end=defaults.end;}
  }else{
-  a[k]=+el.value;
+  const previous=a[k];a[k]=+el.value;
   if(a.end<=a.start){if(k==='start')a.start=a.end-1;else a.end=a.start+1}
+  if(a[k]!==previous)a.timeCustomized=true;
  }
  schedule();forecast();results();
 }});
