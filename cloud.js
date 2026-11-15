@@ -119,6 +119,7 @@ renderSettings=function(m){
    <button class="secondary" id="cloudupload">Upload this wardrobe to Supabase</button>
   </details>
  </details>
+ ${window.wardrobeAppRules?window.wardrobeAppRules():''}
  </section>`;
 };
 document.addEventListener('click',async e=>{const id=e.target.closest('button')?.id;if(!id?.startsWith('cloud'))return;try{if(id==='cloudsave'){let url=document.getElementById('cloudurl').value.trim().replace(/\/$/,'');let key=document.getElementById('cloudkey').value.trim();if(!/^https:\/\/.+\.supabase\.co$/.test(url)||!key)throw Error('Enter a valid Supabase project URL and key.');localStorage.setItem(CFGKEY,JSON.stringify({url,key}));cloud.client=null;message('Connection settings saved.');}else if(id==='cloudlogin')await login();else if(id==='cloudsignup')await signup();else if(id==='cloudlogout'){await getClient().auth.signOut();cloud.user=null;cloud.ready=false;localStorage.removeItem('wardrobe-sync-user');message('Signed out.');}else if(id==='cloudupload')await uploadAll();else if(id==='cloudload'){if(localStorage.getItem('wardrobe-sync-pending')==='1'||cloud.dirty||cloud.saving||cloud.queued){message('Unsynced local changes detected. Sync must finish before updating from Supabase; this prevents overwriting local edits.');return}if(confirm('Update this device from Supabase? This replaces the local wardrobe with the current cloud records.'))await loadAll()}}catch(err){message('Error: '+err.message)}});
