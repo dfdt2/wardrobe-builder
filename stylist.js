@@ -7,6 +7,8 @@ const ACTIVITY_DEFAULT_TIMES={
  Home:[18,24],Party:[20,24],Dressy:[20,24],
  Sport:[8,20],Specialty:[8,20]
 };
+const todayStartHour=()=>new Date().getHours();
+function applyTodayStart(a){if(ST.date!==iso()||a.timeCustomized)return;const h=todayStartHour();if(a.start<h){a.start=h;a.end=Math.max(a.end,Math.min(24,h+1));}}
 const defaultActivity=(type='Daily')=>{const [start,end]=ACTIVITY_DEFAULT_TIMES[type]||[8,17];return {type,start,end,timeCustomized:false};};
 const VIBES=['Casual','Minimal','Polished','Sporty','Romantic','Edgy'];
 const iso=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
@@ -83,7 +85,7 @@ function walkingUnitsValue(steps,unit){
  if(unit==='minutes')return String(Math.round(steps/WALK_STEPS_PER_MINUTE*10)/10);
  return String(Math.round(steps));
 }
-function schedule(){const slot=byid('st-activities');if(!slot)return;slot.innerHTML=ST.activities.map((a,i)=>{
+function schedule(){const slot=byid('st-activities');if(!slot)return;ST.activities.forEach(applyTodayStart);slot.innerHTML=ST.activities.map((a,i)=>{
  const steps=walkingSteps(a),unit=['steps','miles','minutes'].includes(a.walkingUnit)?a.walkingUnit:'steps';
  return `<div class="activity-s"><select aria-label="Activity ${i+1}" data-st-activity="${i}" data-key="type">${options(a.type,TYPES)}</select><div class="time-slider-s"><div class="range-labels-s"><span data-time="start">${time(a.start)}</span><span data-time="end">${time(a.end)}</span></div><div class="time-range-track" data-time-range="${i}" style="--start:${a.start/24*100}%;--end:${a.end/24*100}%"><div class="time-range-fill"></div><button type="button" class="time-range-handle start" data-range-handle="start" role="slider" aria-label="Start time" aria-valuemin="0" aria-valuemax="${a.end-1}" aria-valuenow="${a.start}" aria-valuetext="${time(a.start)}" style="left:${a.start/24*100}%"></button><button type="button" class="time-range-handle end" data-range-handle="end" role="slider" aria-label="End time" aria-valuemin="${a.start+1}" aria-valuemax="24" aria-valuenow="${a.end}" aria-valuetext="${time(a.end)}" style="left:${a.end/24*100}%"></button></div></div><details class="walking-steps-s" style="grid-column:1/-1;margin:3px 0 6px"><summary style="cursor:pointer;font-size:12px;color:#777">Walking distance<span data-walk-summary="${i}">${steps?' · '+steps.toLocaleString()+' steps':''}</span></summary><div style="display:flex;align-items:center;gap:8px;margin-top:9px"><input aria-label="Walking distance for activity ${i+1}" type="number" min="0" step="${unit==='miles'?'any':'1'}" data-st-walking="${i}" value="${E(walkingUnitsValue(steps,unit))}" placeholder="Any" style="width:115px;min-width:0;padding:8px;border:1px solid #ddd;border-radius:8px"><select aria-label="Walking distance unit for activity ${i+1}" data-st-walk-unit="${i}" style="width:110px;padding:8px;border:1px solid #ddd;border-radius:8px">${options(unit,['steps','miles','minutes'])}</select></div></details><button class="tiny remove-s" data-st="remove" data-index="${i}" aria-label="Remove activity">×</button></div>`;
  }).join('');}
@@ -169,7 +171,7 @@ const explicitlyNone=role=>lockedRoles.has(role)&&slotSelection[role]===NONE;
 let outfitPoolCache=null;
 function invalidateOutfitPool(){outfitPoolCache=null;stopOutfitJob();}
 function* buildUncached(){
- const noShoe=explicitlyNone('shoe'),noOuter=explicitlyNone('outer'),noBag=explicitlyNone('bag');
+ const noShoe=false,noOuter=false,noBag=false;
  const homeOnly=ST.activities.length>0&&ST.activities.every(a=>a.type==='Home');
  const month=Number(ST.date.slice(5,7));
  const indoorTemp=month===12||month<=2?65:month>=6&&month<=8?75:70;
@@ -186,7 +188,7 @@ function* buildUncached(){
  const by={top:[],bottom:[],dress:[],shoe:[],outer:[],bag:[],scarf:[],gloves:[],hat:[],belt:[]};
  for(const garment of state.items){
   const role=roleOf(garment);
-  if(!role||excludedItemCodes.has(garment.item_code)||ST.activities.some(a=>!hasOccasion(garment,a.type)))continue;
+  if(!role||ST.activities.some(a=>!hasOccasion(garment,a.type)))continue;
   if(['hat','scarf','gloves'].includes(role)&&(homeOnly||coldest===null||coldest>=accessoryThresholds[role]))continue;
   if(role==='shoe'){
    if(excludeOpenToe&&['sandals','sandal heels'].includes(String(garment.subcategory||'').trim().toLowerCase()))continue;
@@ -199,7 +201,7 @@ function* buildUncached(){
   const a=topsAndDresses[i],b=topsAndDresses[j];
   if(!isLayerPair(a,b)||!trainerEligible(a,b)||state.pairs[[a.item_code,b.item_code].sort().join('::')]!==true)continue;
   const base=layerRole(a)==='base'?a:b,outer=base===a?b:a,code='layer:'+base.item_code+'+'+outer.item_code;
-  if(excludedLayerPairs.has(code))continue;
+
   layered.push({...base,category:a.category==='Dresses'||b.category==='Dresses'?'Dresses':'Tops',item_code:code,name:base.name+' + '+outer.name,layerBase:base,layerOuter:outer});
  }
  const roles=['top','bottom','shoe','outer','scarf','gloves','hat','bag','belt'];
@@ -228,10 +230,7 @@ function* buildUncached(){
  let explored=0;
  function* findCompletion(forcedRole,forcedCode){
   const fixed=new Map();
-  for(const role of lockedRoles){
-   const code=slotSelection[role];
-   if(code)fixed.set(role,code);
-  }
+
   if(forcedRole)fixed.set(forcedRole,forcedCode);
   const constraintKey=roles.map(role=>fixed.get(role)||'*').join('|');
   if(validityCache.has(constraintKey))return validityCache.get(constraintKey);
@@ -349,9 +348,11 @@ function* buildUncached(){
 // rather than holding up schedule controls for one long DFS computation.
 let outfitJob=null;
 let outfitJobToken=0;
-function outfitKey(){
- const locks=[...lockedRoles].sort().map(role=>[role,slotSelection[role]||'']).join('|');
- return conditionsKey()+'|'+locks+'|excluded:'+ [...excludedItemCodes].sort().join(',')+'|excludedPairs:'+ [...excludedLayerPairs].sort().join(',');
+function outfitKey(){return conditionsKey();}
+function visibleOutfitGroups(groups){
+ return groups.map(g=>({...g,variants:g.variants.filter(v=>v.garments.every(x=>
+  !excludedLayerPairs.has(x.item_code)&&![x.item_code,x.layerBase?.item_code,x.layerOuter?.item_code].some(c=>c&&excludedItemCodes.has(c))
+ ))})).filter(g=>g.variants.length);
 }
 function showOutfitLoading(){
  const slot=byid('st-outfit');
@@ -396,7 +397,7 @@ function queueOutfitJob(key){
 }
 function build(){
  const key=outfitKey();
- if(outfitPoolCache&&outfitPoolCache.key===key&&outfitPoolCache.items===state.items&&outfitPoolCache.pairs===state.pairs)return outfitPoolCache.groups;
+ if(outfitPoolCache&&outfitPoolCache.key===key&&outfitPoolCache.items===state.items&&outfitPoolCache.pairs===state.pairs)return visibleOutfitGroups(outfitPoolCache.groups);
  queueOutfitJob(key);
  return null;
 }
@@ -427,9 +428,9 @@ let suppressAnchorClick=false;
 let lastClusterKey='';
 let lastConditionsKey=null;
 function clearAllLocks(){lockedRoles.clear();slotSelection={};previewNoneRoles.clear();}
-function removeFromOutfits(code){if(!code||code===NONE)return;excludedItemCodes.add(code);for(const role of SLOT_ORDER)if(slotSelection[role]===code){lockedRoles.delete(role);delete slotSelection[role];previewNoneRoles.delete(role)}invalidateOutfitPool();results();}
-function restoreExcluded(){excludedItemCodes.clear();excludedLayerPairs.clear();invalidateOutfitPool();results();}
-function removeLayerPair(code){excludedLayerPairs.add(code);lockedRoles.delete('top');delete slotSelection.top;invalidateOutfitPool();results();}
+function removeFromOutfits(code){if(!code||code===NONE)return;excludedItemCodes.add(code);for(const role of SLOT_ORDER)if(slotSelection[role]===code){lockedRoles.delete(role);delete slotSelection[role];previewNoneRoles.delete(role)}results();}
+function restoreExcluded(){excludedItemCodes.clear();excludedLayerPairs.clear();results();}
+function removeLayerPair(code){excludedLayerPairs.add(code);lockedRoles.delete('top');delete slotSelection.top;results();}
 function paintExclusions(){const button=byid('st-restore-excluded');if(button)button.style.display=(excludedItemCodes.size||excludedLayerPairs.size)?'':'none';const slot=byid('st-excluded');if(slot){const items=excludedItems();slot.innerHTML=(items.length||excludedLayerPairs.size)?'<div class="excluded-title-s">Removed for this outfit ('+items.length+')</div><div class="excluded-items-s">'+[...items.map(g=>'<button type="button" class="excluded-chip-s" data-st="restore-one" data-item-code="'+E(g.item_code)+'" aria-label="Restore '+E(g.name)+'">'+E(g.name)+' <span aria-hidden="true">↩</span></button>'),...[...excludedLayerPairs].map(code=>'<button type="button" class="excluded-chip-s" data-st="restore-pair" data-pair-code="'+E(code)+'">'+E(code.replace('layer:','').replace('+',' + '))+' ↩</button>')].join('')+'</div>':'';}}
 function conditionsKey(){return JSON.stringify({activities:ST.activities.map(a=>[a.type,a.start,a.end,walkingSteps(a)]),date:ST.date,location:ST.location,weather:ST.weather});}
 function garmentFor(v,role){return v.garments.find(x=>roleOf(x)===role||(role==='top'&&group(x.category)==='dress'))||null}
@@ -501,8 +502,7 @@ function results(){
  }
  // Initialize a default top lock, favoring a real top when available.
  if(lockedRoles.has('top')&&!slotSelection.top){
-  const first=g.variants.find(v=>itemCode(v,'top'));
-  if(first)slotSelection.top=itemCode(first,'top');else lockedRoles.delete('top');
+  const tops=[...new Set(g.variants.map(v=>itemCode(v,'top')).filter(Boolean))].sort((a,b)=>garmentOrderKey('top',a)-garmentOrderKey('top',b)); if(tops.length)slotSelection.top=tops[0];else lockedRoles.delete('top');
  }
  // If a lock has become impossible (e.g. data changed), recover without trapping the user.
  let matching=matchingLocks(g);
@@ -584,8 +584,8 @@ function detect(){if(!navigator.geolocation){ST.weatherMessage='Location permiss
 window.addEventListener('wardrobe:changed',invalidateOutfitPool);
 window.renderStylist=function(m){if(!ST.dateManual)ST.date=defaultDate();setTitle("Stylist");m.innerHTML=body();schedule();forecast();results();if(!ST.geolocationTried){ST.geolocationTried=true;detect()}};
 document.addEventListener('click',e=>{if(suppressAnchorClick){suppressAnchorClick=false;e.preventDefault();e.stopImmediatePropagation()}},true);
-document.addEventListener('click',e=>{if(state.page!=='stylist')return;const b=e.target.closest('[data-st]');if(!b)return;const act=b.dataset.st;if(act==='open-item'){const code=b.dataset.itemCode,role=b.closest('[data-swipe-role]')?.dataset.swipeRole;if(detailTapTimer&&detailTapCode===code){clearTimeout(detailTapTimer);detailTapTimer=null;detailTapCode=null;if(role)toggleLock(role);}else{if(detailTapTimer)clearTimeout(detailTapTimer);detailTapCode=code;detailTapTimer=setTimeout(()=>{detailTapTimer=null;detailTapCode=null;openItemDetail(code,'stylist','matches')},320);}return}if(act==='toggle-lock'){toggleLock(b.dataset.role);return}if(act==='exclude-item'){removeFromOutfits(b.dataset.itemCode);return}if(act==='exclude-pair'){removeLayerPair(b.dataset.itemCode);return}if(act==='restore-pair'){excludedLayerPairs.delete(b.dataset.pairCode);invalidateOutfitPool();results();return}if(act==='restore-excluded'){restoreExcluded();return}if(act==='restore-one'){excludedItemCodes.delete(b.dataset.itemCode);invalidateOutfitPool();results();return}if(act==='record-wear'){const list=currentOutfitCodes.map(code=>state.items.find(x=>x.item_code===code)).filter(Boolean);if(!list.length)return;for(const x of list)x.wear_count=Math.max(0,Number(x.wear_count)||0)+1;persist();const message=byid('st-wear-confirmation');if(message)message.textContent='Recorded +1 wear for '+list.length+' items.';return}if(act==='random-anchor'){randomAnchor();return}if(act==='clear-locks'){clearAllLocks();results();return} if(act==='cycle-slot'){cycleSlot(b.dataset.role,Number(b.dataset.step));return}if(act==='set-anchor'){toggleLock(b.dataset.role);return}if(act==='detect')detect();if(act==='search')searchLocation();if(act==='add'){ST.activities.push(defaultActivity('Daily'));schedule();forecast();results()}if(act==='remove'){if(ST.activities.length>1){ST.activities.splice(+b.dataset.index,1);schedule();forecast();results()}}if(act==='vibe'){ST.vibe=b.dataset.vibe;ST.cluster=0;ST.variant=0;schedule();results()}if(act==='family'){ST.cluster=+b.dataset.index;ST.variant=0;slotSelection={};lastClusterKey='';results()}if(act==='previous'||act==='next'){const g=build()?.[ST.cluster];if(g)ST.variant=(ST.variant+(act==='next'?1:-1)+g.variants.length)%g.variants.length;results()}});
-document.addEventListener('change',e=>{if(state.page!=='stylist')return;const el=e.target;if(el.id==='st-date'){ST.date=el.value||defaultDate();ST.dateManual=true;const label=byid('st-date-label');if(label)label.textContent=dateLabel(ST.date);ST.weatherKey='';getWeather()}if(el.dataset.stWalkUnit!=null){
+document.addEventListener('click',e=>{if(state.page!=='stylist')return;const b=e.target.closest('[data-st]');if(!b)return;const act=b.dataset.st;if(act==='open-item'){const code=b.dataset.itemCode,role=b.closest('[data-swipe-role]')?.dataset.swipeRole;if(detailTapTimer&&detailTapCode===code){clearTimeout(detailTapTimer);detailTapTimer=null;detailTapCode=null;if(role)toggleLock(role);}else{if(detailTapTimer)clearTimeout(detailTapTimer);detailTapCode=code;detailTapTimer=setTimeout(()=>{detailTapTimer=null;detailTapCode=null;openItemDetail(code,'stylist','matches')},320);}return}if(act==='toggle-lock'){toggleLock(b.dataset.role);return}if(act==='exclude-item'){removeFromOutfits(b.dataset.itemCode);return}if(act==='exclude-pair'){removeLayerPair(b.dataset.itemCode);return}if(act==='restore-pair'){excludedLayerPairs.delete(b.dataset.pairCode);results();return}if(act==='restore-excluded'){restoreExcluded();return}if(act==='restore-one'){excludedItemCodes.delete(b.dataset.itemCode);results();return}if(act==='record-wear'){const list=currentOutfitCodes.map(code=>state.items.find(x=>x.item_code===code)).filter(Boolean);if(!list.length)return;for(const x of list)x.wear_count=Math.max(0,Number(x.wear_count)||0)+1;persist();const message=byid('st-wear-confirmation');if(message)message.textContent='Recorded +1 wear for '+list.length+' items.';return}if(act==='random-anchor'){randomAnchor();return}if(act==='clear-locks'){clearAllLocks();results();return} if(act==='cycle-slot'){cycleSlot(b.dataset.role,Number(b.dataset.step));return}if(act==='set-anchor'){toggleLock(b.dataset.role);return}if(act==='detect')detect();if(act==='search')searchLocation();if(act==='add'){ST.activities.push(defaultActivity('Daily'));schedule();forecast();results()}if(act==='remove'){if(ST.activities.length>1){ST.activities.splice(+b.dataset.index,1);schedule();forecast();results()}}if(act==='vibe'){ST.vibe=b.dataset.vibe;ST.cluster=0;ST.variant=0;schedule();results()}if(act==='family'){ST.cluster=+b.dataset.index;ST.variant=0;slotSelection={};lastClusterKey='';results()}if(act==='previous'||act==='next'){const g=build()?.[ST.cluster];if(g)ST.variant=(ST.variant+(act==='next'?1:-1)+g.variants.length)%g.variants.length;results()}});
+document.addEventListener('change',e=>{if(state.page!=='stylist')return;const el=e.target;if(el.id==='st-date'){ST.date=el.value||defaultDate();ST.dateManual=true;ST.activities.forEach(a=>{if(!a.timeCustomized){const [start,end]=ACTIVITY_DEFAULT_TIMES[a.type]||[8,17];a.start=start;a.end=end;}});schedule();const label=byid('st-date-label');if(label)label.textContent=dateLabel(ST.date);ST.weatherKey='';getWeather()}if(el.dataset.stWalkUnit!=null){
  const i=+el.dataset.stWalkUnit,a=ST.activities[i];if(!a)return;
  const steps=walkingSteps(a);a.walkingUnit=el.value;
  const input=el.closest('.walking-steps-s')?.querySelector('[data-st-walking]');
@@ -596,7 +596,7 @@ document.addEventListener('change',e=>{if(state.page!=='stylist')return;const el
  if(!a)return;
  if(k==='type'){
   const defaults=defaultActivity(el.value);
-  a.type=defaults.type;if(!a.timeCustomized){a.start=defaults.start;a.end=defaults.end;}
+  a.type=defaults.type;if(!a.timeCustomized){a.start=defaults.start;a.end=defaults.end;applyTodayStart(a);}
  }else{
   const previous=a[k];a[k]=+el.value;
   if(a.end<=a.start){if(k==='start')a.start=a.end-1;else a.end=a.start+1}
