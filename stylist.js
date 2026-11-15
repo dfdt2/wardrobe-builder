@@ -183,6 +183,7 @@ function* buildUncached(){
  const coldest=temperatures.length?Math.min(...temperatures):null;
  const warmest=temperatures.length?Math.max(...temperatures):null;
  const accessoryThresholds={hat:40,scarf:60,gloves:50};
+ window.wardrobeStylistRules={openToeMin:60,scarfBelow:accessoryThresholds.scarf,glovesBelow:accessoryThresholds.gloves,hatBelow:accessoryThresholds.hat,target:75,tolerance:2.5};
  const requiredWalkingSteps=ST.activities.reduce((n,a)=>n+walkingSteps(a),0);
  const excludeOpenToe=!homeOnly&&hours.some(h=>ST.activities.some(a=>a.type!=='Home'&&h>=a.start&&h<a.end)&&ST.weather?.[h]?.temp<60);
  const by={top:[],bottom:[],dress:[],shoe:[],outer:[],bag:[],scarf:[],gloves:[],hat:[],belt:[]};
