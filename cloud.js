@@ -1,6 +1,6 @@
 /* Supabase cloud adapter. Client only uses publishable/anon key, never service role. */
 (() => {
-const CFGKEY='wardrobe-cloud-config-v1'; const cloud={client:null,user:null,busy:false,connected:false,ready:false,saving:false,queued:false,baselinePairs:{},dirty:false};
+const CFGKEY='wardrobe-cloud-config-v1'; const cloud={client:null,user:null,busy:false,connected:false,ready:false,saving:false,queued:false,baselinePairs:{},baselineGarments:{},dirty:false};
 const allowed=['item_code','name','category','subcategory','brand','colors','materials','pattern','occasions','seasons','style_tags','image_path','insulation_clo_estimate','wear_count','layering_role','flagged'];
 const config=()=>{try{return JSON.parse(localStorage.getItem(CFGKEY))||{}}catch{return {}}};
 const message=(m)=>{let el=document.getElementById('cloudmsg');if(el)el.textContent=m;console.info('[Wardrobe sync]',m)};
@@ -10,7 +10,7 @@ async function signup(){let email=document.getElementById('cloudemail')?.value?.
 function safeGarment(x){normalizeOccasions([x]);let o={};for(let k of allowed)if(x[k]!==undefined)o[k]=x[k];if(o.insulation_clo_estimate==null||o.insulation_clo_estimate==='')delete o.insulation_clo_estimate; // Never overwrite cloud-calculated insulation with an old blank local value.
 if(x._storage_path)o.image_path=x._storage_path;for(let k of ['image_path'])if(o[k]?.startsWith('images/'))delete o[k];return o}
 async function uploadImages(sb,uid){let count=0;for(let x of state.items){if(!x.image_path?.startsWith('images/'))continue;let path=`${uid}/${x.item_code.toLowerCase()}.webp`;let blob=await fetch(x.image_path).then(r=>{if(!r.ok)throw Error('Cannot read '+x.image_path);return r.blob()});let {error}=await sb.storage.from('garment-images').upload(path,blob,{upsert:true,contentType:blob.type||'image/webp'});if(error)throw Error('Image upload for '+x.item_code+': '+error.message);x.image_path=path;count++}return count}
-async function uploadAll(){pruneIneligiblePairs();if(!confirm('Upload the local wardrobe and pair decisions to this Supabase account? Existing matching item codes and pairs will be updated.'))return;let sb=getClient(),user=(await sb.auth.getUser()).data.user;if(!user)throw Error('Sign in first.');cloud.user=user;message('Uploading images and garments…');let n=await uploadImages(sb,user.id);let rows=state.items.map(x=>({...safeGarment(x),owner_id:user.id}));let {error}=await sb.from('garments').upsert(rows,{onConflict:'owner_id,item_code'});if(error)throw error;let {data:items,error:readerr}=await sb.from('garments').select('id,item_code').eq('owner_id',user.id);if(readerr)throw readerr;let ids=Object.fromEntries(items.map(x=>[x.item_code,x.id]));let pairs=Object.entries(state.pairs).map(([key,v])=>{let [a,b]=key.split('::').map(k=>ids[k]);if(!a||!b)return null;let [garment_a_id,garment_b_id]=[a,b].sort();return {owner_id:user.id,garment_a_id,garment_b_id,decision:v}}).filter(Boolean);if(pairs.length){let {error}=await sb.from('compatibility').upsert(pairs,{onConflict:'owner_id,garment_a_id,garment_b_id'});if(error)throw error}cloud.connected=true;cloud.ready=true;cloud.baselinePairs={...state.pairs};localStorage.setItem('wardrobe-sync-user',user.id);localStorage.removeItem('wardrobe-sync-pending');reportCloudCount(pairs.length,'saved');message(`Saved ${rows.length} garments, ${pairs.length} pair decisions, and ${n} images in Supabase. Auto-sync enabled.`);}
+async function uploadAll(){pruneIneligiblePairs();if(!confirm('Upload the local wardrobe and pair decisions to this Supabase account? Existing matching item codes and pairs will be updated.'))return;let sb=getClient(),user=(await sb.auth.getUser()).data.user;if(!user)throw Error('Sign in first.');cloud.user=user;message('Uploading images and garments…');let n=await uploadImages(sb,user.id);let rows=state.items.map(x=>({...safeGarment(x),owner_id:user.id}));let {error}=await sb.from('garments').upsert(rows,{onConflict:'owner_id,item_code'});if(error)throw error;let {data:items,error:readerr}=await sb.from('garments').select('id,item_code').eq('owner_id',user.id);if(readerr)throw readerr;let ids=Object.fromEntries(items.map(x=>[x.item_code,x.id]));let pairs=Object.entries(state.pairs).map(([key,v])=>{let [a,b]=key.split('::').map(k=>ids[k]);if(!a||!b)return null;let [garment_a_id,garment_b_id]=[a,b].sort();return {owner_id:user.id,garment_a_id,garment_b_id,decision:v}}).filter(Boolean);if(pairs.length){let {error}=await sb.from('compatibility').upsert(pairs,{onConflict:'owner_id,garment_a_id,garment_b_id'});if(error)throw error}cloud.connected=true;cloud.ready=true;cloud.baselinePairs={...state.pairs};cloud.baselineGarments=Object.fromEntries(state.items.map(x=>[x.item_code,safeGarment(x)]));localStorage.setItem('wardrobe-sync-user',user.id);localStorage.removeItem('wardrobe-sync-pending');reportCloudCount(pairs.length,'saved');message(`Saved ${rows.length} garments, ${pairs.length} pair decisions, and ${n} images in Supabase. Auto-sync enabled.`);}
 async function fetchAllRows(sb,table,columns,uid){let out=[];for(let from=0;;from+=500){const {data,error}=await sb.from(table).select(columns).eq('owner_id',uid).range(from,from+499);if(error)throw error;out.push(...(data||[]));if(!data||data.length<500)break;}return out;}
 function reportCloudCount(count,status){window.wardrobeCloudCount=count;window.wardrobeSyncStatus=status;window.dispatchEvent(new Event('wardrobe:sync-status'));}
 async function loadAll(){let sb=getClient(),user=(await sb.auth.getUser()).data.user;if(!user)throw Error('Sign in first.');cloud.user=user;let items=await fetchAllRows(sb,'garments','*',user.id);items.sort((a,b)=>String(a.item_code).localeCompare(String(b.item_code)));let relationships=await fetchAllRows(sb,'compatibility','garment_a_id,garment_b_id,decision',user.id);if(!items.length){message('No cloud garments yet. Use “Upload this wardrobe” to import the 10 starter items.');return}let byId=Object.fromEntries(items.map(x=>[x.id,x.item_code]));let pairs={};for(let p of relationships){let a=byId[p.garment_a_id],b=byId[p.garment_b_id];if(a&&b)pairs[pairKey(a,b)]=p.decision}
@@ -31,7 +31,7 @@ for (let x of items) {
   x._storage_path = path;
   x.image_path = data.publicUrl;
 }
-normalizeOccasions(items);state.items=items;state.pairs=pairs;pruneIneligiblePairs();state.category='All';state.subcategory='All';cloud.connected=true;cloud.ready=true;cloud.baselinePairs={...state.pairs};localStorage.setItem('wardrobe-sync-user',user.id);localStorage.removeItem('wardrobe-sync-pending');localStorage.setItem(KEY,JSON.stringify({items:state.items,pairs:state.pairs}));reportCloudCount(Object.keys(state.pairs).length,'saved');render();message(`Loaded ${items.length} garments and ${Object.keys(pairs).length} decisions from Supabase. Auto-sync enabled.`)}
+normalizeOccasions(items);state.items=items;state.pairs=pairs;pruneIneligiblePairs();state.category='All';state.subcategory='All';cloud.connected=true;cloud.ready=true;cloud.baselinePairs={...state.pairs};cloud.baselineGarments=Object.fromEntries(state.items.map(x=>[x.item_code,safeGarment(x)]));localStorage.setItem('wardrobe-sync-user',user.id);localStorage.removeItem('wardrobe-sync-pending');localStorage.setItem(KEY,JSON.stringify({items:state.items,pairs:state.pairs}));reportCloudCount(Object.keys(state.pairs).length,'saved');render();message(`Loaded ${items.length} garments and ${Object.keys(pairs).length} decisions from Supabase. Auto-sync enabled.`)}
 
 // Auto-sync only after a deliberate cloud load/upload. This prevents stale browser data
 // from silently overwriting the cloud on sign-in.
@@ -50,8 +50,24 @@ async function drain(){
     reportCloudCount(window.wardrobeCloudCount??null,'saving');message('Saving changes…');
     await uploadImages(sb,user.id);
     const snapshot=JSON.parse(JSON.stringify({items:state.items.map(safeGarment),pairs:state.pairs}));
-    const rows=snapshot.items.map(x=>({...x,owner_id:user.id}));
-    if(rows.length){const {error}=await sb.from('garments').upsert(rows,{onConflict:'owner_id,item_code'});if(error)throw error;}
+    // Patch only locally changed fields, preserving cloud-side edits on other fields.
+    for(const row of snapshot.items){
+      const baseline=cloud.baselineGarments[row.item_code];
+      if(!baseline){
+        const {error}=await sb.from('garments').upsert({...row,owner_id:user.id},{onConflict:'owner_id,item_code'});
+        if(error)throw error;
+      }else{
+        const delta={};
+        for(const [key,value] of Object.entries(row)){
+          if(key==='item_code')continue;
+          if(JSON.stringify(value)!==JSON.stringify(baseline[key]))delta[key]=value;
+        }
+        if(Object.keys(delta).length){
+          const {error}=await sb.from('garments').update(delta).eq('owner_id',user.id).eq('item_code',row.item_code);
+          if(error)throw error;
+        }
+      }
+    }
     const {data:items,error:readerr}=await sb.from('garments').select('id,item_code').eq('owner_id',user.id);
     if(readerr)throw readerr;
     const ids=Object.fromEntries(items.map(x=>[x.item_code,x.id]));
@@ -70,6 +86,7 @@ async function drain(){
     const obsolete=existing.filter(p=>removedIds.has(p.garment_a_id+'::'+p.garment_b_id)).map(p=>p.id);
     if(obsolete.length){const {error}=await sb.from('compatibility').delete().eq('owner_id',user.id).in('id',obsolete);if(error)throw error;}
     cloud.baselinePairs={...snapshot.pairs};
+    cloud.baselineGarments=Object.fromEntries(snapshot.items.map(x=>[x.item_code,x]));
     if(JSON.stringify(state.pairs)===JSON.stringify(snapshot.pairs) && JSON.stringify(state.items.map(safeGarment))===JSON.stringify(snapshot.items)){cloud.dirty=false;localStorage.removeItem('wardrobe-sync-pending');}
     else cloud.queued=true;
     reportCloudCount(existing.length-obsolete.length+Math.max(0,pairs.length-existing.filter(p=>current.has(p.garment_a_id+'::'+p.garment_b_id)).length),'saved');message('All changes saved to Supabase.');
