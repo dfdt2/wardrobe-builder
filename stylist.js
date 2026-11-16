@@ -663,7 +663,7 @@ async function useWorkLocation(){
    if(r.ok){const d=await r.json();if(d.length)coords={lat:Number(d[0].lat),lon:Number(d[0].lon)}}
   }catch(e){}
   if(!coords){
-   const city=address.split(',').slice(-3)[0]?.replace(/^\s*\d+\s*/, '').trim()||'Marlborough';
+   const city=address.split(',')[1]?.trim()||'Marlborough';
    const r=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=10&language=en&format=json`);
    const d=await r.json();
    const match=d.results?.find(c=>c.country_code==='US'&&c.admin1==='Massachusetts')||d.results?.find(c=>c.country_code==='US');
@@ -692,7 +692,7 @@ function detect(){
 }
 function syncActivityLocation(){
  if(workSelected()){
-  if(locationMode!=='work'||ST.location!==workAddress()||ST.lat==null)useWorkLocation();
+  if(locationMode!=='work'||ST.location!==workAddress())useWorkLocation();
  }else if(locationMode==='work'||!ST.geolocationTried){
   ST.geolocationTried=true;detect();
  }
