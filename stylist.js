@@ -8,7 +8,15 @@ const ACTIVITY_DEFAULT_TIMES={
  Sport:[8,20],Specialty:[8,20]
 };
 const todayStartHour=()=>new Date().getHours();
-function applyTodayStart(a){if(ST.date!==iso()||a.timeCustomized)return;const h=todayStartHour();if(a.start<h){a.start=h;a.end=Math.max(a.end,Math.min(24,h+1));}}
+function applyTodayStart(a){
+ if(a.timeCustomized)return;
+ const [start,end]=ACTIVITY_DEFAULT_TIMES[a.type]||[8,17];
+ const h=todayStartHour();
+ // Only trim the elapsed portion of an activity while it is still underway.
+ // Once its default end has passed (or on another date), retain the original schedule.
+ a.start=ST.date===iso()&&h>=start&&h<end?h:start;
+ a.end=end;
+}
 const defaultActivity=(type='Daily')=>{const [start,end]=ACTIVITY_DEFAULT_TIMES[type]||[8,17];return {type,start,end,timeCustomized:false};};
 const VIBES=['Casual','Minimal','Polished','Sporty','Romantic','Edgy'];
 const iso=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
