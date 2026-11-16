@@ -13,11 +13,24 @@ if(x._storage_path)o.image_path=x._storage_path;for(let k of ['image_path'])if(o
 // The cloud snapshot remains the baseline so auto-sync sends only these modified fields.
 function upgradeTopMetadata(items){
  const thinIntimissimi={'TOP-008':.080,'TOP-014':.090,'TOP-018':.080,'TOP-043':.090,'TOP-097':.090,'TOP-124':.090};
+ // Apply the user's corrected top warmth values if the cloud still has
+ // the original estimates. Leave any later, manually changed value alone.
+ const warmthCorrections={
+  'TOP-111':[.320,.800],'TOP-016':[.400,.780],'TOP-116':[.320,.600],
+  'TOP-029':[.650,.480],'TOP-027':[.550,.470],'TOP-025':[.500,.460],
+  'TOP-028':[.400,.450],'TOP-083':[.390,.450],'TOP-084':[.380,.440],
+  'TOP-024':[.450,.230],'TOP-058':[.350,.240],'TOP-114':[.260,.285]
+ };
  let changed=false;
  for(const x of items){
   if(x.category!=='Tops')continue;
   if(x.subcategory==='Shirt'){
    x.subcategory=/(sleeveless|halter)/i.test(x.name||'')?'Tank top':/(short.sleeve|cap.sleeve|puff.sleeve|flutter.sleeve)/i.test(x.name||'')?'Short Sleeve Shirt':'Long Sleeve Shirt';
+   changed=true;
+  }
+  const priorAndNew=warmthCorrections[x.item_code];
+  if(priorAndNew&&Math.abs(Number(x.insulation_clo_estimate)-priorAndNew[0])<.000001){
+   x.insulation_clo_estimate=priorAndNew[1];
    changed=true;
   }
   const target=thinIntimissimi[x.item_code];
