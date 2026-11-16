@@ -161,7 +161,9 @@ function rainBeyondMist(w){
  if(!w)return false;
  const code=Number(w.code);
  if([53,55,56,57,61,63,65,66,67,80,81,82,95,96,99].includes(code))return true;
- return Number.isFinite(Number(w.precipMm))&&Number(w.precipMm)>RAIN_MIST_MAX_MM_H;
+ // Hourly precipitation also includes snowfall water equivalent: don't infer rain from snow.
+ if([71,73,75,77,85,86].includes(code)||Number(w.snow)>0)return false;
+ return w.precipMm!=null&&Number.isFinite(Number(w.precipMm))&&Number(w.precipMm)>RAIN_MIST_MAX_MM_H;
 }
 function rainDuringOuting(){return outdoorScheduleHours().some(h=>rainBeyondMist(ST.weather?.[h]));}
 function updateRainNotice(){
@@ -172,14 +174,18 @@ function updateRainNotice(){
 // Faux/vegan materials are not assumed to be genuine leather, suede or fur.
 function rainSensitiveGarment(g){
  const materials=Array.isArray(g.materials)?g.materials:[g.materials||''];
- const pieces=[...materials,g.name||'',...(Array.isArray(g.style_tags)?g.style_tags:[])];
- return pieces.some(value=>{
-  const raw=String(value).toLowerCase();
-  if(!/\b(leather|suede|nubuck|fur|shearling|mink|fox fur|rabbit fur)\b/.test(raw))return false;
-  const cleaned=raw.replace(/\b(faux|fake|vegan|synthetic|imitation|artificial|pu|polyurethane|pleather|leatherette)\s*[- ]?\s*(leather|suede|nubuck|fur|shearling)\b/g,'')
-    .replace(/\b(faux[- ]?fur|vegan[- ]?leather|leatherette|pleather)\b/g,'');
-  return /\b(leather|suede|nubuck|fur|shearling|mink)\b/.test(cleaned);
- }) || (g.subcategory==='Fur coat' && !/\b(faux|fake|synthetic)\s*[- ]?\s*fur\b/i.test(g.name||''));
+ const fauxPattern=/\b(faux|fake|vegan|synthetic|imitation|artificial|pu|polyurethane)\s*[- ]?\s*(leather|suede|nubuck|fur|shearling)\b|\b(pleather|leatherette)\b/i;
+ const animalPattern=/\b(leather|suede|nubuck|fur|shearling|mink)\b/i;
+ const genuineMaterial=materials.some(m=>animalPattern.test(String(m))&&!fauxPattern.test(String(m)));
+ if(genuineMaterial)return true;
+ const name=String(g.name||'');
+ const tags=Array.isArray(g.style_tags)?g.style_tags:[];
+ // When the garment itself is explicitly faux fur/leather, incidental mentions
+ // such as "fur collar" must not override that classification.
+ if(fauxPattern.test(name)&&!materials.some(m=>animalPattern.test(String(m))&&!fauxPattern.test(String(m))))return false;
+ const descriptions=[name,...tags].join(' | ');
+ const cleaned=descriptions.replace(/\b(faux|fake|vegan|synthetic|imitation|artificial|pu|polyurethane)\s*[- ]?\s*(leather|suede|nubuck|fur|shearling)\b|\b(pleather|leatherette)\b/gi,'');
+ return animalPattern.test(cleaned)||g.subcategory==='Fur coat';
 }
 // Require approval only for relationships that the trainer offers for evaluation.
 // Use exactly the same trained relationship types as allPairs() in the
@@ -223,8 +229,12 @@ function* buildUncached(){
  const accessoryThresholds={hat:40,scarf:60,gloves:50};
  const requiredWalkingSteps=ST.activities.reduce((n,a)=>n+walkingSteps(a),0);
  const outsideHours=outdoorScheduleHours();
- const excludeOpenToe=outsideHours.some(h=>Number(ST.weather?.[h]?.temp)<60);
- const excludeShorts=outsideHours.some(h=>Number(ST.weather?.[h]?.temp)<SHORTS_MIN_F);
+ const outsideBelow=limit=>outsideHours.some(h=>{
+  const temp=ST.weather?.[h]?.temp;
+  return temp!=null&&Number.isFinite(Number(temp))&&Number(temp)<limit;
+ });
+ const excludeOpenToe=outsideBelow(60);
+ const excludeShorts=outsideBelow(SHORTS_MIN_F);
  const excludeRainSensitive=rainDuringOuting();
  const by={top:[],bottom:[],dress:[],shoe:[],outer:[],bag:[],scarf:[],gloves:[],hat:[],belt:[]};
  for(const garment of state.items){
