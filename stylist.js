@@ -2,6 +2,9 @@
 (()=>{
 let locationTimer;
 const TYPES=['Work','Daily','Date','Business','Home','Party','Dressy','Sport','Specialty'];
+const SHORTS_MIN_F=50;
+const RAIN_MIST_MAX_MM_H=0.2;
+window.wardrobeStylistRules={openToeMin:60,shortsMin:SHORTS_MIN_F,scarfBelow:60,glovesBelow:50,hatBelow:40,target:75,tolerance:2.5,rainMistMaxMm:RAIN_MIST_MAX_MM_H};
 const ACTIVITY_DEFAULT_TIMES={
  Work:[8,17],Daily:[8,17],Date:[8,17],Business:[8,17],
  Home:[18,24],Party:[20,24],Dressy:[20,24],
@@ -41,7 +44,7 @@ function body(){
   <div class="small" id="st-weather-msg" role="status" style="display:none"></div><div id="st-forecast" class="forecast-s"></div></section>
   <section class="panel-s"><h2>Schedule</h2><div id="st-activities"></div><button class="tiny" data-st="add">+ Add activity</button></section>
 
-  </div><div><section class="panel-s"><div class="line-s"><h2>Outfit recommendation</h2><div class="outfit-actions-s"><span class="small" id="st-count"></span><button type="button" class="random-outfit-s" data-st="clear-locks" aria-label="Unlock all selected garments">Clear locks</button><button type="button" class="random-outfit-s" data-st="random-anchor" aria-label="Choose a random eligible garment as anchor">Random</button></div></div><div id="st-outfit"></div></section></div></div></section>`;
+  </div><div><section class="panel-s"><div class="line-s"><h2>Outfit recommendation</h2><div class="outfit-actions-s"><span class="small" id="st-count"></span><button type="button" class="random-outfit-s" data-st="clear-locks" aria-label="Unlock all selected garments">Clear locks</button><button type="button" class="random-outfit-s" data-st="random-anchor" aria-label="Choose a random eligible garment as anchor">Random</button></div></div><div id="st-rain-notice" role="status" aria-live="polite" style="display:none;margin:11px 0;padding:11px 13px;border:1px solid #e4d5aa;border-radius:10px;background:#fffaf0;color:#795416;font-size:13px;font-weight:600">Bring an umbrella</div><div id="st-outfit"></div></section></div></div></section>`;
 }
 function weatherTheme(w){if(!w)return 'neutral';if([95,96,99].includes(w.code))return 'storm';if(w.snow>0||[71,73,75,77,85,86].includes(w.code))return 'snow';if([51,53,55,61,63,65,80,81,82].includes(w.code)||w.rain>=70)return 'rain';if([0,1].includes(w.code))return 'sunny';if(w.code===2)return 'partly';return 'cloudy'}
 function weatherSymbol(w,h){const theme=weatherTheme(w);if(theme==='storm')return '⛈';if(theme==='snow')return '❄';if(theme==='rain')return '☂';if(theme==='cloudy')return '☁';if(theme==='partly')return '⛅';return h<6||h>=20?'☾':'☀'}
@@ -151,6 +154,33 @@ function layeredComfortError(temp,base,coat=null,scarf=null,gloves=null,hat=null
  return best;
 }
 function scheduleHours(){const out=new Set();for(const a of ST.activities)for(let h=a.start;h<a.end;h++)out.add(h);return [...out].sort((a,b)=>a-b)}
+function outdoorScheduleHours(){return scheduleHours().filter(h=>ST.activities.some(a=>a.type!=='Home'&&h>=a.start&&h<a.end));}
+// Weather codes 51 (slight drizzle) and 45/48 (fog) are allowed;
+// moderate/dense drizzle, rain, freezing precipitation and storms are not.
+function rainBeyondMist(w){
+ if(!w)return false;
+ const code=Number(w.code);
+ if([53,55,56,57,61,63,65,66,67,80,81,82,95,96,99].includes(code))return true;
+ return Number.isFinite(Number(w.precipMm))&&Number(w.precipMm)>RAIN_MIST_MAX_MM_H;
+}
+function rainDuringOuting(){return outdoorScheduleHours().some(h=>rainBeyondMist(ST.weather?.[h]));}
+function updateRainNotice(){
+ const notice=byid('st-rain-notice');if(!notice)return;
+ notice.style.display=rainDuringOuting()?'block':'none';
+}
+// Material restrictions apply only when rain heavier than mist is forecast.
+// Faux/vegan materials are not assumed to be genuine leather, suede or fur.
+function rainSensitiveGarment(g){
+ const materials=Array.isArray(g.materials)?g.materials:[g.materials||''];
+ const pieces=[...materials,g.name||'',...(Array.isArray(g.style_tags)?g.style_tags:[])];
+ return pieces.some(value=>{
+  const raw=String(value).toLowerCase();
+  if(!/\b(leather|suede|nubuck|fur|shearling|mink|fox fur|rabbit fur)\b/.test(raw))return false;
+  const cleaned=raw.replace(/\b(faux|fake|vegan|synthetic|imitation|artificial|pu|polyurethane|pleather|leatherette)\s*[- ]?\s*(leather|suede|nubuck|fur|shearling)\b/g,'')
+    .replace(/\b(faux[- ]?fur|vegan[- ]?leather|leatherette|pleather)\b/g,'');
+  return /\b(leather|suede|nubuck|fur|shearling|mink)\b/.test(cleaned);
+ }) || (g.subcategory==='Fur coat' && !/\b(faux|fake|synthetic)\s*[- ]?\s*fur\b/i.test(g.name||''));
+}
 // Require approval only for relationships that the trainer offers for evaluation.
 // Use exactly the same trained relationship types as allPairs() in the
 // compatibility trainer. A missing, excluded, or unreviewed trained pair is
@@ -191,13 +221,17 @@ function* buildUncached(){
  const coldest=temperatures.length?Math.min(...temperatures):null;
  const warmest=temperatures.length?Math.max(...temperatures):null;
  const accessoryThresholds={hat:40,scarf:60,gloves:50};
- window.wardrobeStylistRules={openToeMin:60,scarfBelow:accessoryThresholds.scarf,glovesBelow:accessoryThresholds.gloves,hatBelow:accessoryThresholds.hat,target:75,tolerance:2.5};
  const requiredWalkingSteps=ST.activities.reduce((n,a)=>n+walkingSteps(a),0);
- const excludeOpenToe=!homeOnly&&hours.some(h=>ST.activities.some(a=>a.type!=='Home'&&h>=a.start&&h<a.end)&&ST.weather?.[h]?.temp<60);
+ const outsideHours=outdoorScheduleHours();
+ const excludeOpenToe=outsideHours.some(h=>Number(ST.weather?.[h]?.temp)<60);
+ const excludeShorts=outsideHours.some(h=>Number(ST.weather?.[h]?.temp)<SHORTS_MIN_F);
+ const excludeRainSensitive=rainDuringOuting();
  const by={top:[],bottom:[],dress:[],shoe:[],outer:[],bag:[],scarf:[],gloves:[],hat:[],belt:[]};
  for(const garment of state.items){
   const role=roleOf(garment);
   if(!role||ST.activities.some(a=>!hasOccasion(garment,a.type)))continue;
+  if(excludeShorts&&garment.subcategory==='Shorts')continue;
+  if(excludeRainSensitive&&rainSensitiveGarment(garment))continue;
   if(['hat','scarf','gloves'].includes(role)&&(homeOnly||coldest===null||coldest>=accessoryThresholds[role]))continue;
   if(role==='shoe'){
    if(excludeOpenToe&&['sandals','sandal heels'].includes(String(garment.subcategory||'').trim().toLowerCase()))continue;
@@ -491,6 +525,7 @@ function emptyReason(){
 }
 function results(){
  if(!byid('st-outfit'))return;
+ updateRainNotice();
  paintExclusions();
  const nextConditionsKey=conditionsKey();
  if(lastConditionsKey!==null&&nextConditionsKey!==lastConditionsKey){clearAllLocks();lastClusterKey='';}
@@ -585,7 +620,7 @@ function cycleSlot(role,step){
  results();
 }
 
-async function getWeather(){if(ST.lat==null||ST.lon==null)return;const key=`${ST.lat},${ST.lon},${ST.date}`;if(ST.weatherKey===key&&ST.weather)return;ST.weather=null;ST.weatherMessage='Loading forecast…';forecast();try{const url=`https://api.open-meteo.com/v1/forecast?latitude=${ST.lat}&longitude=${ST.lon}&hourly=apparent_temperature,precipitation_probability,snowfall,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=16`;const res=await fetch(url);if(!res.ok)throw Error('Forecast service unavailable');const d=await res.json();const hours=Array.from({length:24},(_,h)=>{const idx=d.hourly.time.indexOf(`${ST.date}T${String(h).padStart(2,'0')}:00`);return idx<0?null:{temp:d.hourly.apparent_temperature[idx],rain:d.hourly.precipitation_probability[idx]??0,snow:d.hourly.snowfall[idx]??0,code:d.hourly.weather_code[idx]}});if(hours.every(x=>!x))throw Error('Forecast unavailable for this date (typically limited to the next 16 days)');ST.weather=hours;ST.weatherKey=key;ST.weatherMessage='';}catch(e){ST.weatherMessage=e.message;ST.weatherKey='';}forecast();results();}
+async function getWeather(){if(ST.lat==null||ST.lon==null)return;const key=`${ST.lat},${ST.lon},${ST.date}`;if(ST.weatherKey===key&&ST.weather)return;ST.weather=null;ST.weatherMessage='Loading forecast…';forecast();try{const url=`https://api.open-meteo.com/v1/forecast?latitude=${ST.lat}&longitude=${ST.lon}&hourly=apparent_temperature,precipitation_probability,precipitation,snowfall,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=16`;const res=await fetch(url);if(!res.ok)throw Error('Forecast service unavailable');const d=await res.json();const hours=Array.from({length:24},(_,h)=>{const idx=d.hourly.time.indexOf(`${ST.date}T${String(h).padStart(2,'0')}:00`);return idx<0?null:{temp:d.hourly.apparent_temperature[idx],rain:d.hourly.precipitation_probability[idx]??0,precipMm:d.hourly.precipitation?.[idx]??null,snow:d.hourly.snowfall[idx]??0,code:d.hourly.weather_code[idx]}});if(hours.every(x=>!x))throw Error('Forecast unavailable for this date (typically limited to the next 16 days)');ST.weather=hours;ST.weatherKey=key;ST.weatherMessage='';}catch(e){ST.weatherMessage=e.message;ST.weatherKey='';}forecast();results();}
 async function searchLocation(){let name=byid('st-location')?.value.trim();if(!name)return;ST.weatherMessage='Looking up location…';forecast();try{let r=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`);let d=await r.json();if(!d.results?.length)throw Error('Location not found');let c=d.results[0];ST.lat=c.latitude;ST.lon=c.longitude;ST.location=[c.name,c.admin1,c.country].filter(Boolean).join(', ');byid('st-location').value=ST.location;await getWeather()}catch(e){ST.weatherMessage=e.message;forecast()}}
 function detect(){if(!navigator.geolocation){ST.weatherMessage='Location permission unavailable';forecast();return}ST.weatherMessage='Detecting location…';forecast();navigator.geolocation.getCurrentPosition(async p=>{ST.lat=p.coords.latitude;ST.lon=p.coords.longitude;ST.location='Current location';if(byid('st-location'))byid('st-location').value=ST.location;try{let r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${ST.lat}&lon=${ST.lon}&format=json&zoom=10&addressdetails=1`);let j=await r.json();if(j.address){ST.location=[j.address.city||j.address.town||j.address.village||j.address.municipality||j.address.county,j.address.state].filter(Boolean).join(', ');if(byid('st-location'))byid('st-location').value=ST.location}}catch(e){}await getWeather()},()=>{ST.weatherMessage='Location access denied. Search for a city instead.';forecast()},{timeout:12000,maximumAge:600000})}
 // Re-entering Stylist should reuse completed calculations and any in-progress
