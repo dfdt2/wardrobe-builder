@@ -1,7 +1,13 @@
 /* Integrated stylist: uses Builder state.items / state.pairs, not demo approvals. */
 (()=>{
 let locationTimer;
-const TYPES=['Work','Daily','Date','Business','Home','Party','Dressy','Sport','Specialty'];
+let locationRequestId=0;
+let locationMode='auto';
+const WORK_ADDRESS_KEY='wardrobe-work-address';
+const DEFAULT_WORK_ADDRESS='100 Results Wy, Marlborough, MA 01752';
+const workAddress=()=>{try{return localStorage.getItem(WORK_ADDRESS_KEY)?.trim()||DEFAULT_WORK_ADDRESS}catch(e){return DEFAULT_WORK_ADDRESS}};
+const workSelected=()=>ST.activities.some(a=>a.type==='Work');
+const TYPES=['Daily','Work','Date','Business','Home','Party','Dressy','Sport','Specialty'];
 const SHORTS_MIN_F=50;
 const RAIN_MIST_MAX_MM_H=0.2;
 window.wardrobeStylistRules={openToeMin:60,shortsMin:SHORTS_MIN_F,scarfBelow:60,glovesBelow:50,hatBelow:40,target:75,tolerance:2.5,rainMistMaxMm:RAIN_MIST_MAX_MM_H};
@@ -30,7 +36,7 @@ const excludedItemCodes=new Set();
 const excludedLayerPairs=new Set(); // Session-only, never persisted.
 let detailTapTimer=null,detailTapCode=null;
 function excludedItems(){return [...excludedItemCodes].map(code=>state.items.find(g=>g.item_code===code)).filter(Boolean)}
-const ST={date:defaultDate(),dateManual:false,location:'',lat:null,lon:null,weather:null,weatherKey:'',weatherMessage:'Choose a location to retrieve a forecast.',activities:[defaultActivity('Work')],vibe:'Casual',cluster:0,variant:0,requesting:false,geolocationTried:false};
+const ST={date:defaultDate(),dateManual:false,location:'',lat:null,lon:null,weather:null,weatherKey:'',weatherMessage:'Choose a location to retrieve a forecast.',activities:[defaultActivity('Daily')],vibe:'Casual',cluster:0,variant:0,requesting:false,geolocationTried:false};
 const E=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const byid=id=>document.getElementById(id);
 const time=h=>h===24?'12 AM':`${h%12||12} ${h<12?'AM':'PM'}`;
@@ -631,14 +637,73 @@ function cycleSlot(role,step){
 }
 
 async function getWeather(){if(ST.lat==null||ST.lon==null)return;const key=`${ST.lat},${ST.lon},${ST.date}`;if(ST.weatherKey===key&&ST.weather)return;ST.weather=null;ST.weatherMessage='Loading forecast…';forecast();try{const url=`https://api.open-meteo.com/v1/forecast?latitude=${ST.lat}&longitude=${ST.lon}&hourly=apparent_temperature,precipitation_probability,precipitation,snowfall,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=16`;const res=await fetch(url);if(!res.ok)throw Error('Forecast service unavailable');const d=await res.json();const hours=Array.from({length:24},(_,h)=>{const idx=d.hourly.time.indexOf(`${ST.date}T${String(h).padStart(2,'0')}:00`);return idx<0?null:{temp:d.hourly.apparent_temperature[idx],rain:d.hourly.precipitation_probability[idx]??0,precipMm:d.hourly.precipitation?.[idx]??null,snow:d.hourly.snowfall[idx]??0,code:d.hourly.weather_code[idx]}});if(hours.every(x=>!x))throw Error('Forecast unavailable for this date (typically limited to the next 16 days)');ST.weather=hours;ST.weatherKey=key;ST.weatherMessage='';}catch(e){ST.weatherMessage=e.message;ST.weatherKey='';}forecast();results();}
-async function searchLocation(){let name=byid('st-location')?.value.trim();if(!name)return;ST.weatherMessage='Looking up location…';forecast();try{let r=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`);let d=await r.json();if(!d.results?.length)throw Error('Location not found');let c=d.results[0];ST.lat=c.latitude;ST.lon=c.longitude;ST.location=[c.name,c.admin1,c.country].filter(Boolean).join(', ');byid('st-location').value=ST.location;await getWeather()}catch(e){ST.weatherMessage=e.message;forecast()}}
-function detect(){if(!navigator.geolocation){ST.weatherMessage='Location permission unavailable';forecast();return}ST.weatherMessage='Detecting location…';forecast();navigator.geolocation.getCurrentPosition(async p=>{ST.lat=p.coords.latitude;ST.lon=p.coords.longitude;ST.location='Current location';if(byid('st-location'))byid('st-location').value=ST.location;try{let r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${ST.lat}&lon=${ST.lon}&format=json&zoom=10&addressdetails=1`);let j=await r.json();if(j.address){ST.location=[j.address.city||j.address.town||j.address.village||j.address.municipality||j.address.county,j.address.state].filter(Boolean).join(', ');if(byid('st-location'))byid('st-location').value=ST.location}}catch(e){}await getWeather()},()=>{ST.weatherMessage='Location access denied. Search for a city instead.';forecast()},{timeout:12000,maximumAge:600000})}
+async function searchLocation(){
+ const name=byid('st-location')?.value.trim();if(!name)return;
+ const request=++locationRequestId;locationMode='manual';
+ ST.weatherMessage='Looking up location…';forecast();
+ try{
+  const r=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`);
+  const d=await r.json();if(request!==locationRequestId)return;
+  if(!d.results?.length)throw Error('Location not found');
+  const c=d.results[0];ST.lat=c.latitude;ST.lon=c.longitude;
+  ST.location=[c.name,c.admin1,c.country].filter(Boolean).join(', ');
+  if(byid('st-location'))byid('st-location').value=ST.location;
+  await getWeather();
+ }catch(e){if(request===locationRequestId){ST.weatherMessage=e.message;forecast()}}
+}
+async function useWorkLocation(){
+ const request=++locationRequestId;locationMode='work';
+ const address=workAddress();ST.location=address;ST.lat=null;ST.lon=null;ST.weather=null;ST.weatherKey='';
+ if(byid('st-location'))byid('st-location').value=address;
+ ST.weatherMessage='Finding workplace forecast…';forecast();results();
+ try{
+  let coords=null;
+  try{
+   const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=${encodeURIComponent(address)}`);
+   if(r.ok){const d=await r.json();if(d.length)coords={lat:Number(d[0].lat),lon:Number(d[0].lon)}}
+  }catch(e){}
+  if(!coords){
+   const city=address.split(',').slice(-3)[0]?.replace(/^\s*\d+\s*/, '').trim()||'Marlborough';
+   const r=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=10&language=en&format=json`);
+   const d=await r.json();
+   const match=d.results?.find(c=>c.country_code==='US'&&c.admin1==='Massachusetts')||d.results?.find(c=>c.country_code==='US');
+   if(!match)throw Error('Work address not found. Update it in Settings.');
+   coords={lat:match.latitude,lon:match.longitude};
+  }
+  if(request!==locationRequestId)return;
+  ST.lat=coords.lat;ST.lon=coords.lon;await getWeather();
+ }catch(e){if(request===locationRequestId){ST.weatherMessage=e.message;forecast();results()}}
+}
+function detect(){
+ const request=++locationRequestId;locationMode='auto';
+ if(!navigator.geolocation){ST.weatherMessage='Location permission unavailable';forecast();return}
+ ST.weatherMessage='Detecting location…';forecast();
+ navigator.geolocation.getCurrentPosition(async p=>{
+  if(request!==locationRequestId)return;
+  ST.lat=p.coords.latitude;ST.lon=p.coords.longitude;ST.location='Current location';
+  if(byid('st-location'))byid('st-location').value=ST.location;
+  try{
+   const r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${ST.lat}&lon=${ST.lon}&format=json&zoom=10&addressdetails=1`);
+   const j=await r.json();if(request!==locationRequestId)return;
+   if(j.address){ST.location=[j.address.city||j.address.town||j.address.village||j.address.municipality||j.address.county,j.address.state].filter(Boolean).join(', ');if(byid('st-location'))byid('st-location').value=ST.location}
+  }catch(e){}
+  if(request===locationRequestId)await getWeather();
+ },()=>{if(request===locationRequestId){ST.weatherMessage='Location access denied. Search for a city instead.';forecast()}},{timeout:12000,maximumAge:600000});
+}
+function syncActivityLocation(){
+ if(workSelected()){
+  if(locationMode!=='work'||ST.location!==workAddress()||ST.lat==null)useWorkLocation();
+ }else if(locationMode==='work'||!ST.geolocationTried){
+  ST.geolocationTried=true;detect();
+ }
+}
+window.addEventListener('wardrobe:work-address-changed',()=>{if(workSelected())useWorkLocation()});
 // Re-entering Stylist should reuse completed calculations and any in-progress
 // job. Results are invalidated only when their actual inputs change.
 window.addEventListener('wardrobe:changed',invalidateOutfitPool);
-window.renderStylist=function(m){if(!ST.dateManual)ST.date=defaultDate();setTitle("Stylist");m.innerHTML=body();schedule();forecast();results();if(!ST.geolocationTried){ST.geolocationTried=true;detect()}};
+window.renderStylist=function(m){if(!ST.dateManual)ST.date=defaultDate();setTitle("Stylist");m.innerHTML=body();schedule();forecast();results();syncActivityLocation()};
 document.addEventListener('click',e=>{if(suppressAnchorClick){suppressAnchorClick=false;e.preventDefault();e.stopImmediatePropagation()}},true);
-document.addEventListener('click',e=>{if(state.page!=='stylist')return;const b=e.target.closest('[data-st]');if(!b)return;const act=b.dataset.st;if(act==='open-item'){const code=b.dataset.itemCode,role=b.closest('[data-swipe-role]')?.dataset.swipeRole;if(detailTapTimer&&detailTapCode===code){clearTimeout(detailTapTimer);detailTapTimer=null;detailTapCode=null;if(role)toggleLock(role);}else{if(detailTapTimer)clearTimeout(detailTapTimer);detailTapCode=code;detailTapTimer=setTimeout(()=>{detailTapTimer=null;detailTapCode=null;openItemDetail(code,'stylist','matches')},320);}return}if(act==='toggle-lock'){toggleLock(b.dataset.role);return}if(act==='exclude-item'){removeFromOutfits(b.dataset.itemCode);return}if(act==='exclude-pair'){removeLayerPair(b.dataset.itemCode);return}if(act==='restore-pair'){excludedLayerPairs.delete(b.dataset.pairCode);results();return}if(act==='restore-excluded'){restoreExcluded();return}if(act==='restore-one'){excludedItemCodes.delete(b.dataset.itemCode);results();return}if(act==='record-wear'){const list=currentOutfitCodes.map(code=>state.items.find(x=>x.item_code===code)).filter(Boolean);if(!list.length)return;for(const x of list)x.wear_count=Math.max(0,Number(x.wear_count)||0)+1;persist();const message=byid('st-wear-confirmation');if(message)message.textContent='Recorded +1 wear for '+list.length+' items.';return}if(act==='random-anchor'){randomAnchor();return}if(act==='clear-locks'){clearAllLocks();results();return} if(act==='cycle-slot'){cycleSlot(b.dataset.role,Number(b.dataset.step));return}if(act==='set-anchor'){toggleLock(b.dataset.role);return}if(act==='detect')detect();if(act==='search')searchLocation();if(act==='add'){ST.activities.push(defaultActivity('Daily'));schedule();forecast();results()}if(act==='remove'){if(ST.activities.length>1){ST.activities.splice(+b.dataset.index,1);schedule();forecast();results()}}if(act==='vibe'){ST.vibe=b.dataset.vibe;ST.cluster=0;ST.variant=0;schedule();results()}if(act==='family'){ST.cluster=+b.dataset.index;ST.variant=0;slotSelection={};lastClusterKey='';results()}if(act==='previous'||act==='next'){const g=build()?.[ST.cluster];if(g)ST.variant=(ST.variant+(act==='next'?1:-1)+g.variants.length)%g.variants.length;results()}});
+document.addEventListener('click',e=>{if(state.page!=='stylist')return;const b=e.target.closest('[data-st]');if(!b)return;const act=b.dataset.st;if(act==='open-item'){const code=b.dataset.itemCode,role=b.closest('[data-swipe-role]')?.dataset.swipeRole;if(detailTapTimer&&detailTapCode===code){clearTimeout(detailTapTimer);detailTapTimer=null;detailTapCode=null;if(role)toggleLock(role);}else{if(detailTapTimer)clearTimeout(detailTapTimer);detailTapCode=code;detailTapTimer=setTimeout(()=>{detailTapTimer=null;detailTapCode=null;openItemDetail(code,'stylist','matches')},320);}return}if(act==='toggle-lock'){toggleLock(b.dataset.role);return}if(act==='exclude-item'){removeFromOutfits(b.dataset.itemCode);return}if(act==='exclude-pair'){removeLayerPair(b.dataset.itemCode);return}if(act==='restore-pair'){excludedLayerPairs.delete(b.dataset.pairCode);results();return}if(act==='restore-excluded'){restoreExcluded();return}if(act==='restore-one'){excludedItemCodes.delete(b.dataset.itemCode);results();return}if(act==='record-wear'){const list=currentOutfitCodes.map(code=>state.items.find(x=>x.item_code===code)).filter(Boolean);if(!list.length)return;for(const x of list)x.wear_count=Math.max(0,Number(x.wear_count)||0)+1;persist();const message=byid('st-wear-confirmation');if(message)message.textContent='Recorded +1 wear for '+list.length+' items.';return}if(act==='random-anchor'){randomAnchor();return}if(act==='clear-locks'){clearAllLocks();results();return} if(act==='cycle-slot'){cycleSlot(b.dataset.role,Number(b.dataset.step));return}if(act==='set-anchor'){toggleLock(b.dataset.role);return}if(act==='detect')detect();if(act==='search')searchLocation();if(act==='add'){ST.activities.push(defaultActivity('Daily'));schedule();syncActivityLocation();forecast();results()}if(act==='remove'){if(ST.activities.length>1){ST.activities.splice(+b.dataset.index,1);schedule();syncActivityLocation();forecast();results()}}if(act==='vibe'){ST.vibe=b.dataset.vibe;ST.cluster=0;ST.variant=0;schedule();results()}if(act==='family'){ST.cluster=+b.dataset.index;ST.variant=0;slotSelection={};lastClusterKey='';results()}if(act==='previous'||act==='next'){const g=build()?.[ST.cluster];if(g)ST.variant=(ST.variant+(act==='next'?1:-1)+g.variants.length)%g.variants.length;results()}});
 document.addEventListener('change',e=>{if(state.page!=='stylist')return;const el=e.target;if(el.id==='st-date'){ST.date=el.value||defaultDate();ST.dateManual=true;ST.activities.forEach(a=>{if(!a.timeCustomized){const [start,end]=ACTIVITY_DEFAULT_TIMES[a.type]||[8,17];a.start=start;a.end=end;}});schedule();const label=byid('st-date-label');if(label)label.textContent=dateLabel(ST.date);ST.weatherKey='';getWeather()}if(el.dataset.stWalkUnit!=null){
  const i=+el.dataset.stWalkUnit,a=ST.activities[i];if(!a)return;
  const steps=walkingSteps(a);a.walkingUnit=el.value;
@@ -656,6 +721,7 @@ document.addEventListener('change',e=>{if(state.page!=='stylist')return;const el
   if(a.end<=a.start){if(k==='start')a.start=a.end-1;else a.end=a.start+1}
   if(a[k]!==previous)a.timeCustomized=true;
  }
+ if(k==='type')syncActivityLocation();
  schedule();forecast();results();
 }});
 document.addEventListener('input',e=>{if(state.page==='stylist'&&e.target.dataset.stWalking!=null){setWalkingInput(e.target);return}if(state.page==='stylist'&&e.target.id==='st-location'){clearTimeout(locationTimer);locationTimer=setTimeout(()=>{if(byid('st-location')?.value.trim().length>=3)searchLocation()},600)}});
