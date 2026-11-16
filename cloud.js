@@ -9,6 +9,25 @@ async function login(){let email=document.getElementById('cloudemail')?.value?.t
 async function signup(){let email=document.getElementById('cloudemail')?.value?.trim();let password=document.getElementById('cloudpassword')?.value;if(!email||!password)throw Error('Enter email and password.');let {data,error}=await getClient().auth.signUp({email,password});if(error)throw error;cloud.user=data.user||null;message(data.session?'Account created and signed in.':'Account created. If email confirmation is enabled, confirm the email, then sign in.');}
 function safeGarment(x){normalizeOccasions([x]);let o={};for(let k of allowed)if(x[k]!==undefined)o[k]=x[k];if(o.insulation_clo_estimate==null||o.insulation_clo_estimate==='')delete o.insulation_clo_estimate; // Never overwrite cloud-calculated insulation with an old blank local value.
 if(x._storage_path)o.image_path=x._storage_path;for(let k of ['image_path'])if(o[k]?.startsWith('images/'))delete o[k];return o}
+// One-time metadata migration for the long/short-sleeve split and thin layering tops.
+// The cloud snapshot remains the baseline so auto-sync sends only these modified fields.
+function upgradeTopMetadata(items){
+ const thinIntimissimi={'TOP-008':.080,'TOP-014':.090,'TOP-018':.080,'TOP-043':.090,'TOP-097':.090,'TOP-124':.090};
+ let changed=false;
+ for(const x of items){
+  if(x.category!=='Tops')continue;
+  if(x.subcategory==='Shirt'){
+   x.subcategory=/(sleeveless|halter)/i.test(x.name||'')?'Tank top':/(short.sleeve|cap.sleeve|puff.sleeve|flutter.sleeve)/i.test(x.name||'')?'Short Sleeve Shirt':'Long Sleeve Shirt';
+   changed=true;
+  }
+  const target=thinIntimissimi[x.item_code];
+  if(target!==undefined&&/intimissimi/i.test(x.brand||'')&&Number(x.insulation_clo_estimate)>target){
+   x.insulation_clo_estimate=target;
+   changed=true;
+  }
+ }
+ return changed;
+}
 async function uploadImages(sb,uid){let count=0;for(let x of state.items){if(!x.image_path?.startsWith('images/'))continue;let path=`${uid}/${x.item_code.toLowerCase()}.webp`;let blob=await fetch(x.image_path).then(r=>{if(!r.ok)throw Error('Cannot read '+x.image_path);return r.blob()});let {error}=await sb.storage.from('garment-images').upload(path,blob,{upsert:true,contentType:blob.type||'image/webp'});if(error)throw Error('Image upload for '+x.item_code+': '+error.message);x.image_path=path;count++}return count}
 async function uploadAll(){pruneIneligiblePairs();if(!confirm('Upload the local wardrobe and pair decisions to this Supabase account? Existing matching item codes and pairs will be updated.'))return;let sb=getClient(),user=(await sb.auth.getUser()).data.user;if(!user)throw Error('Sign in first.');cloud.user=user;message('Uploading images and garments…');let n=await uploadImages(sb,user.id);let rows=state.items.map(x=>({...safeGarment(x),owner_id:user.id}));let {error}=await sb.from('garments').upsert(rows,{onConflict:'owner_id,item_code'});if(error)throw error;let {data:items,error:readerr}=await sb.from('garments').select('id,item_code').eq('owner_id',user.id);if(readerr)throw readerr;let ids=Object.fromEntries(items.map(x=>[x.item_code,x.id]));let pairs=Object.entries(state.pairs).map(([key,v])=>{let [a,b]=key.split('::').map(k=>ids[k]);if(!a||!b)return null;let [garment_a_id,garment_b_id]=[a,b].sort();return {owner_id:user.id,garment_a_id,garment_b_id,decision:v}}).filter(Boolean);if(pairs.length){let {error}=await sb.from('compatibility').upsert(pairs,{onConflict:'owner_id,garment_a_id,garment_b_id'});if(error)throw error}cloud.connected=true;cloud.ready=true;cloud.baselinePairs={...state.pairs};cloud.baselineGarments=Object.fromEntries(state.items.map(x=>[x.item_code,safeGarment(x)]));localStorage.setItem('wardrobe-sync-user',user.id);localStorage.removeItem('wardrobe-sync-pending');reportCloudCount(pairs.length,'saved');message(`Saved ${rows.length} garments, ${pairs.length} pair decisions, and ${n} images in Supabase. Auto-sync enabled.`);}
 async function fetchAllRows(sb,table,columns,uid){let out=[];for(let from=0;;from+=500){const {data,error}=await sb.from(table).select(columns).eq('owner_id',uid).range(from,from+499);if(error)throw error;out.push(...(data||[]));if(!data||data.length<500)break;}return out;}
@@ -31,7 +50,7 @@ for (let x of items) {
   x._storage_path = path;
   x.image_path = data.publicUrl;
 }
-normalizeOccasions(items);state.items=items;state.pairs=pairs;pruneIneligiblePairs();state.category='All';state.subcategory='All';cloud.connected=true;cloud.ready=true;cloud.baselinePairs={...state.pairs};cloud.baselineGarments=Object.fromEntries(state.items.map(x=>[x.item_code,safeGarment(x)]));localStorage.setItem('wardrobe-sync-user',user.id);localStorage.removeItem('wardrobe-sync-pending');localStorage.setItem(KEY,JSON.stringify({items:state.items,pairs:state.pairs}));reportCloudCount(Object.keys(state.pairs).length,'saved');render();message(`Loaded ${items.length} garments and ${Object.keys(pairs).length} decisions from Supabase. Auto-sync enabled.`)}
+normalizeOccasions(items);state.items=items;state.pairs=pairs;pruneIneligiblePairs();state.category='All';state.subcategory='All';cloud.connected=true;cloud.ready=true;cloud.baselinePairs={...state.pairs};cloud.baselineGarments=Object.fromEntries(state.items.map(x=>[x.item_code,safeGarment(x)]));const upgraded=upgradeTopMetadata(state.items);localStorage.setItem('wardrobe-sync-user',user.id);localStorage.removeItem('wardrobe-sync-pending');localStorage.setItem(KEY,JSON.stringify({items:state.items,pairs:state.pairs}));if(upgraded)persist();reportCloudCount(Object.keys(state.pairs).length,'saved');render();message(`Loaded ${items.length} garments and ${Object.keys(pairs).length} decisions from Supabase. Auto-sync enabled.`)}
 
 // Auto-sync only after a deliberate cloud load/upload. This prevents stale browser data
 // from silently overwriting the cloud on sign-in.
