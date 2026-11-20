@@ -45,7 +45,7 @@ async function uploadImages(sb,uid){let count=0;for(let x of state.items){if(!x.
 async function uploadAll(){pruneIneligiblePairs();if(!confirm('Upload the local wardrobe and pair decisions to this Supabase account? Existing matching item codes and pairs will be updated.'))return;let sb=getClient(),user=(await sb.auth.getUser()).data.user;if(!user)throw Error('Sign in first.');cloud.user=user;message('Uploading images and garments…');let n=await uploadImages(sb,user.id);let rows=state.items.map(x=>({...safeGarment(x),owner_id:user.id}));let {error}=await sb.from('garments').upsert(rows,{onConflict:'owner_id,item_code'});if(error)throw error;let {data:items,error:readerr}=await sb.from('garments').select('id,item_code').eq('owner_id',user.id);if(readerr)throw readerr;let ids=Object.fromEntries(items.map(x=>[x.item_code,x.id]));let pairs=Object.entries(state.pairs).map(([key,v])=>{let [a,b]=key.split('::').map(k=>ids[k]);if(!a||!b)return null;let [garment_a_id,garment_b_id]=[a,b].sort();return {owner_id:user.id,garment_a_id,garment_b_id,decision:v}}).filter(Boolean);if(pairs.length){let {error}=await sb.from('compatibility').upsert(pairs,{onConflict:'owner_id,garment_a_id,garment_b_id'});if(error)throw error}cloud.connected=true;cloud.ready=true;cloud.baselinePairs={...state.pairs};cloud.baselineGarments=Object.fromEntries(state.items.map(x=>[x.item_code,safeGarment(x)]));localStorage.setItem('wardrobe-sync-user',user.id);localStorage.removeItem('wardrobe-sync-pending');reportCloudCount(pairs.length,'saved');message(`Saved ${rows.length} garments, ${pairs.length} pair decisions, and ${n} images in Supabase. Auto-sync enabled.`);}
 async function fetchAllRows(sb,table,columns,uid){let out=[];for(let from=0;;from+=500){const {data,error}=await sb.from(table).select(columns).eq('owner_id',uid).range(from,from+499);if(error)throw error;out.push(...(data||[]));if(!data||data.length<500)break;}return out;}
 function reportCloudCount(count,status){window.wardrobeCloudCount=count;window.wardrobeSyncStatus=status;window.dispatchEvent(new Event('wardrobe:sync-status'));}
-async function loadAll(){let sb=getClient(),user=(await sb.auth.getUser()).data.user;if(!user)throw Error('Sign in first.');cloud.user=user;let items=await fetchAllRows(sb,'garments','*',user.id);items.sort((a,b)=>String(a.item_code).localeCompare(String(b.item_code)));let relationships=await fetchAllRows(sb,'compatibility','garment_a_id,garment_b_id,decision',user.id);if(!items.length){message('No cloud garments yet. Use “Upload this wardrobe” to import the 10 starter items.');return}let byId=Object.fromEntries(items.map(x=>[x.id,x.item_code]));let pairs={};for(let p of relationships){let a=byId[p.garment_a_id],b=byId[p.garment_b_id];if(a&&b)pairs[pairKey(a,b)]=p.decision}
+async function loadAll(){let sb=getClient(),user=(await sb.auth.getUser()).data.user;if(!user)throw Error('Sign in first.');cloud.user=user;let items=await fetchAllRows(sb,'garments','*',user.id);items.sort((a,b)=>String(a.item_code).localeCompare(String(b.item_code)));let relationships=await fetchAllRows(sb,'compatibility','garment_a_id,garment_b_id,decision',user.id);if(!items.length){message('Supabase wardrobe is empty.');}let byId=Object.fromEntries(items.map(x=>[x.id,x.item_code]));let pairs={};for(let p of relationships){let a=byId[p.garment_a_id],b=byId[p.garment_b_id];if(a&&b)pairs[pairKey(a,b)]=p.decision}
 for (let x of items) {
   if (!x.image_path) continue;
 
@@ -68,13 +68,56 @@ normalizeOccasions(items);state.items=items;state.pairs=pairs;pruneIneligiblePai
 // Auto-sync only after a deliberate cloud load/upload. This prevents stale browser data
 // from silently overwriting the cloud on sign-in.
 let timer;
+let deletingGarment=false;
+// Cloud-first permanent deletion. Do not let the background upsert race the DELETE.
+window.deleteWardrobeGarmentPermanently=async function(code){
+ if(deletingGarment)throw Error('Another deletion is already in progress.');
+ if(!cloud.ready||!cloud.user)throw Error('Connect and load your Supabase wardrobe before permanently deleting an item.');
+ deletingGarment=true;
+ clearTimeout(timer);
+ try{
+  // An in-flight sync must finish before deleting or it could restore this row.
+  for(let i=0;cloud.saving&&i<150;i++)await new Promise(resolve=>setTimeout(resolve,100));
+  if(cloud.saving)throw Error('Cloud synchronization is still busy. Please retry.');
+  const sb=getClient(),{data:{user},error:authError}=await sb.auth.getUser();
+  if(authError||!user||user.id!==cloud.user.id)throw Error('Your Supabase session expired. Sign in again.');
+  const garment=state.items.find(x=>x.item_code===code);
+  if(!garment)throw Error('Item no longer exists in the wardrobe.');
+  const {data:row,error:findError}=await sb.from('garments').select('id,image_path').eq('owner_id',user.id).eq('item_code',code).maybeSingle();
+  if(findError)throw findError;
+  if(!row)throw Error('Item not found in Supabase. Reload cloud data before attempting deletion.');
+  const {data:deleted,error:deleteError}=await sb.from('garments').delete().eq('owner_id',user.id).eq('id',row.id).eq('item_code',code).select('id');
+  if(deleteError)throw deleteError;
+  if(deleted?.length!==1)throw Error('Supabase did not confirm the deletion. The local item has been preserved.');
+  // Foreign keys cascade-delete Trainer compatibility decisions.
+  state.items=state.items.filter(x=>x.item_code!==code);
+  for(const key of Object.keys(state.pairs))if(key.split('::').includes(code))delete state.pairs[key];
+  delete cloud.baselineGarments[code];
+  for(const key of Object.keys(cloud.baselinePairs))if(key.split('::').includes(code))delete cloud.baselinePairs[key];
+  if(state.selected===code)state.selected=null;
+  ensureCleanout();
+  saveCleanout();
+  persist();
+  // Remove only an image stored under the authenticated owner's private prefix.
+  // A storage error does not undo a successful database deletion.
+  let imageWarning='';
+  if(typeof row.image_path==='string'&&row.image_path.startsWith(user.id+'/')){
+   const {error:imageError}=await sb.storage.from('garment-images').remove([row.image_path]);
+   if(imageError)imageWarning=' The database entry was deleted, but its uploaded photo could not be removed: '+imageError.message;
+  }
+  return imageWarning;
+ }finally{
+  deletingGarment=false;
+  if(cloud.queued){clearTimeout(timer);timer=setTimeout(()=>void drain(),300);}
+ }
+};
 window.addEventListener('wardrobe:changed',()=>{
   if(!cloud.ready || !cloud.user)return;
   cloud.dirty=true;localStorage.setItem('wardrobe-sync-pending','1');reportCloudCount(window.wardrobeCloudCount??null,'pending');clearTimeout(timer);
   timer=setTimeout(()=>{cloud.queued=true;void drain();},300);
 });
 async function drain(){
-  if(cloud.saving || !cloud.queued || !cloud.ready)return;
+  if(cloud.saving || deletingGarment || !cloud.queued || !cloud.ready)return;
   cloud.saving=true;cloud.queued=false;
   try{
     let sb=getClient(), user=(await sb.auth.getUser()).data.user;
