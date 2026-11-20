@@ -139,15 +139,13 @@ function comfortError(temp,baseWarmth,extraWarmth=0,coatWarmth=0){
  const withCoat=coatWarmth>0?Math.abs(temp+baseWarmth+extraWarmth+coatWarmth-75):Infinity;
  return Math.min(without,withCoat);
 }
-// Evaluate removable layers separately at each scheduled hour. A scarf can
-// be worn alone; hats and gloves require the jacket to be worn that hour.
+// Evaluate removable layers separately at each scheduled hour.
+// Scarves, hats and gloves may only be worn while the jacket is worn.
 // Every displayed garment is available for warmth when needed, but need not
 // stay on indoors or during a warmer part of the same schedule.
 function layeredComfortError(temp,base,coat=null,scarf=null,gloves=null,hat=null,removable=0){
  if(removable)return Math.min(layeredComfortError(temp,base,coat,scarf,gloves,hat,0),layeredComfortError(temp,base-removable,coat,scarf,gloves,hat,0));
  let best=Math.abs(temp+base-75);
- const scarfWarmth=scarf?warmth(scarf):0;
- if(scarf)best=Math.min(best,Math.abs(temp+base+scarfWarmth-75));
  if(coat){
   const coatBase=base+warmth(coat);
   const extras=[scarf,gloves,hat].filter(Boolean);
@@ -198,7 +196,7 @@ function rainSensitiveGarment(g){
 // compatibility trainer. A missing, excluded, or unreviewed trained pair is
 // never an implicit approval.
 const ROLE=(c,g)=>{const role=g?roleOf(g):c==='Tops'?'top':(['Pants','Skirts'].includes(c)?'bottom':c==='Shoes'?'shoe':c==='Outerwear'?'outer':c==='Bags'?'bag':c==='Dresses'?'dress':null);return role==='shoe'?'shoes':role;};
-const TRAINABLE=new Set(['bottom|top','bottom|shoes','bottom|outer','outer|top','dress|outer','dress|shoes','bag|top','bag|outer','bag|dress','hat|outer','gloves|outer','outer|scarf','hat|scarf','gloves|scarf','gloves|hat','belt|bottom']);
+const TRAINABLE=new Set(['bottom|top','bottom|shoes','bottom|outer','outer|top','dress|outer','dress|shoes','bag|top','bag|outer','bag|dress','hat|outer','gloves|outer','outer|scarf','scarf|top','dress|scarf','hat|scarf','gloves|scarf','gloves|hat','belt|bottom']);
 const trainedPairType=(a,b)=>pairTrainable(a,b);
 function trainerEligible(a,b){return trainedPairType(a,b)&&homePairAllowed(a,b)&&sharedTrainableActivity(a,b)}
 function validatedPair(a,b){if(a?.layerBase)return validatedPair(a.layerBase,b)&&validatedPair(a.layerOuter,b);if(b?.layerBase)return validatedPair(a,b.layerBase)&&validatedPair(a,b.layerOuter);const key=[a.item_code,b.item_code].sort().join('::');return trainedPairType(a,b)?trainerEligible(a,b)&&state.pairs[key]===true:state.pairs[key]!==false}
@@ -498,13 +496,13 @@ function selectedCode(v,role){return itemCode(v,role)||(OPTIONAL_ROLES.has(role)
 function matchingLocks(g,omit=null){return g.variants.filter(v=>[...lockedRoles].every(r=>r===omit||!slotSelection[r]||selectedCode(v,r)===slotSelection[r]))}
 function optionsForSlot(g,role){return matchingLocks(g,role)}
 function toggleLock(role){
- if(['hat','gloves'].includes(role)&&(previewNoneRoles.has('outer')||explicitlyNone('outer')))return;
+ if(['scarf','hat','gloves'].includes(role)&&(previewNoneRoles.has('outer')||explicitlyNone('outer')))return;
  const g=build()?.[ST.cluster];if(!g)return;
  if(lockedRoles.has(role)){lockedRoles.delete(role);results();return}
  const code=slotSelection[role]||selectedCode(matchingLocks(g)[0]||g.variants[0],role);
  if(!code)return;
  if(code!==NONE&&!matchingLocks(g).some(v=>selectedCode(v,role)===code))return;
- if(role==='outer'&&code===NONE){for(const accessory of ['hat','gloves']){lockedRoles.delete(accessory);previewNoneRoles.add(accessory);slotSelection[accessory]=NONE;}}
+ if(role==='outer'&&code===NONE){for(const accessory of ['scarf','hat','gloves']){lockedRoles.delete(accessory);previewNoneRoles.add(accessory);slotSelection[accessory]=NONE;}}
  slotSelection[role]=code;previewNoneRoles.delete(role);lockedRoles.add(role);results();
 }
 function randomAnchor(){
@@ -571,7 +569,7 @@ function results(){
  // Keep temporary None selections visible without changing the validated outfit pool.
  for(const role of SLOT_ORDER)slotSelection[role]=previewNoneRoles.has(role)?NONE:selectedCode(chosen,role);
  const jacketRemoved=previewNoneRoles.has('outer')||explicitlyNone('outer');
- const displayedGarments=chosen.garments.filter(x=>!previewNoneRoles.has(roleOf(x))&&!(jacketRemoved&&['hat','gloves'].includes(roleOf(x))));
+ const displayedGarments=chosen.garments.filter(x=>!previewNoneRoles.has(roleOf(x))&&!(jacketRemoved&&['scarf','hat','gloves'].includes(roleOf(x))));
  currentOutfitCodes=[...new Set(displayedGarments.flatMap(x=>x.layerBase?[x.layerBase.item_code,x.layerOuter.item_code]:[x.item_code]).filter(Boolean))];
  const baseGarments=displayedGarments.filter(g=>!['outer','bag','hat','scarf','gloves'].includes(roleOf(g)));
  const coat=displayedGarments.find(g=>group(g.category)==='outer');
@@ -580,7 +578,7 @@ function results(){
  // The outfit's usable temperature envelope includes removable layers:
  // cold end = all garments worn; warm end = the mandatory base after
  // removing outerwear, accessories and any removable overshirt.
- // Hats/gloves can only be worn with the jacket; removing all of them
+ // Scarves/hats/gloves can only be worn with the jacket; removing all of them
  // is always a valid configuration. A dress remains part of the base.
  const fullWarmth=baseWarmth+(coat?warmth(coat):0)+accessoryWarmth;
  const removableTopWarmth=garmentFor(chosen,'top')?.layerOuter?warmth(garmentFor(chosen,'top').layerOuter):0;
@@ -589,11 +587,11 @@ function results(){
  byid('st-count').textContent='Adjustable range: '+fullLow+'–'+fullHigh+'°F';
  byid('st-count').title='Full outfit with every layer at the cold end; mandatory base with optional layers removed at the warm end (67–77°F comfort envelope). Outfit eligibility may use a stricter comfort target.';
  const labels={top:'Top / dress',outer:'Jacket',bottom:'Pants / skirt',shoe:'Shoes',bag:'Bag',hat:'Hat',scarf:'Scarf',gloves:'Gloves',belt:'Belt'};
- const noOuterWarning=(explicitlyNone('outer')||previewNoneRoles.has('outer'))&&!ST.activities.every(a=>a.type==='Home')&&scheduleHours().some(h=>{const temp=ST.weather?.[h]?.temp;return Number.isFinite(temp)&&layeredComfortError(temp,baseWarmth,null,displayedGarments.find(g=>roleOf(g)==='scarf')||null)>2.5;});
+ const noOuterWarning=(explicitlyNone('outer')||previewNoneRoles.has('outer'))&&!ST.activities.every(a=>a.type==='Home')&&scheduleHours().some(h=>{const temp=ST.weather?.[h]?.temp;return Number.isFinite(temp)&&layeredComfortError(temp,baseWarmth,null)>2.5;});
  const slots=SLOT_ORDER.map(role=>{
   const possible=[...new Map(optionsForSlot(g,role).map(v=>{const item=garmentFor(v,role);return [item?.item_code||NONE,item]})).values()].sort((a,b)=>garmentOrderKey(role,a?.item_code||NONE)-garmentOrderKey(role,b?.item_code||NONE));
   if(OPTIONAL_ROLES.has(role)&&!possible.includes(null))possible.push(null);
-  const current=previewNoneRoles.has(role)||(jacketRemoved&&['hat','gloves'].includes(role))?null:garmentFor(chosen,role),code=current?.item_code||NONE;
+  const current=previewNoneRoles.has(role)||(jacketRemoved&&['scarf','hat','gloves'].includes(role))?null:garmentFor(chosen,role),code=current?.item_code||NONE;
   const index=possible.findIndex(x=>(x?.item_code||NONE)===code);
   const count=possible.length,canCycle=count>1;
   const isLocked=lockedRoles.has(role);
@@ -620,14 +618,14 @@ function cycleSlot(role,step){
  const current=slotSelection[role]||selectedCode(variants[0],role);
  const index=Math.max(0,options.indexOf(current));
  const code=options[(index+step+options.length)%options.length];
- if(['hat','gloves'].includes(role)&&code!==NONE&&(previewNoneRoles.has('outer')||explicitlyNone('outer')))return;
+ if(['scarf','hat','gloves'].includes(role)&&code!==NONE&&(previewNoneRoles.has('outer')||explicitlyNone('outer')))return;
  slotSelection[role]=code;
  // Browsing None never changes the lock state. Only explicit locking can override.
  if(code===NONE){if(!lockedRoles.has(role))previewNoneRoles.add(role);else previewNoneRoles.delete(role);
-  if(role==='outer'){for(const accessory of ['hat','gloves']){lockedRoles.delete(accessory);previewNoneRoles.add(accessory);slotSelection[accessory]=NONE;}}
+  if(role==='outer'){for(const accessory of ['scarf','hat','gloves']){lockedRoles.delete(accessory);previewNoneRoles.add(accessory);slotSelection[accessory]=NONE;}}
   results();return;}
  previewNoneRoles.delete(role);
- if(role==='outer'&&code!==NONE){for(const accessory of ['hat','gloves'])previewNoneRoles.delete(accessory);}
+ if(role==='outer'&&code!==NONE){for(const accessory of ['scarf','hat','gloves'])previewNoneRoles.delete(accessory);}
  // If a lock is switched, preserve all other locks; update unlocked slots to a valid outfit.
  const matches=matchingLocks(g,role).filter(v=>selectedCode(v,role)===code);
  if(!matches.length)return;
