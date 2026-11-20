@@ -340,8 +340,8 @@ function* buildUncached(){
     if(layeredComfortError(warmest,baseWarmth,picked.outer,picked.scarf,picked.gloves,picked.hat,picked.top?.layerOuter?warmth(picked.top.layerOuter):0)>2.5)return null;
    }
    if(index===roles.length){
-    // Hats and gloves each require an actual jacket, including in locked looks.
-    if(!picked.outer&&(picked.hat||picked.gloves))return null;
+    // Scarves, hats and gloves each require an actual jacket, including in locked looks.
+    if(!picked.outer&&(picked.scarf||picked.hat||picked.gloves))return null;
     const base=[picked.top,picked.bottom,picked.shoe].filter(Boolean);
     if(!validBaseOutfit(base,homeOnly||noShoe))return null;
     const baseWarmth=base.reduce((sum,g)=>sum+warmth(g),0);
@@ -362,8 +362,8 @@ function* buildUncached(){
     if(role==='top'&&!choices.length)return null;
    // Avoid optional-item searches for a missing required shoe.
    if(role==='shoe'&&!choices.length)return null;
-   // A no-jacket look cannot acquire gloves or a hat.
-   if(!picked.outer&&(role==='gloves'||role==='hat'))choices=[null];
+   // A no-jacket look cannot acquire weather accessories.
+   if(!picked.outer&&['scarf','gloves','hat'].includes(role))choices=[null];
    const forced=fixed.get(role);
    if(forced!==undefined)choices=choices.filter(x=>optionCode(x)===forced);
    for(const item of choices){
