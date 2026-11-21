@@ -196,7 +196,7 @@ function rainSensitiveGarment(g){
 // compatibility trainer. A missing, excluded, or unreviewed trained pair is
 // never an implicit approval.
 const ROLE=(c,g)=>{const role=g?roleOf(g):c==='Tops'?'top':(['Pants','Skirts'].includes(c)?'bottom':c==='Shoes'?'shoe':c==='Outerwear'?'outer':c==='Bags'?'bag':c==='Dresses'?'dress':null);return role==='shoe'?'shoes':role;};
-const TRAINABLE=new Set(['bottom|top','bottom|shoes','bottom|outer','outer|top','dress|outer','dress|shoes','bag|top','bag|outer','bag|dress','hat|outer','gloves|outer','outer|scarf','scarf|top','dress|scarf','hat|scarf','gloves|scarf','gloves|hat','belt|bottom']);
+const TRAINABLE=new Set(['bottom|top','bottom|shoes','bottom|outer','outer|top','dress|outer','dress|shoes','bag|top','bag|outer','bag|dress','hat|outer','gloves|outer','gloves|top','hat|top','outer|scarf','scarf|top','dress|scarf','hat|scarf','gloves|scarf','gloves|hat','belt|bottom']);
 const trainedPairType=(a,b)=>pairTrainable(a,b);
 function trainerEligible(a,b){return trainedPairType(a,b)&&homePairAllowed(a,b)&&sharedTrainableActivity(a,b)}
 function validatedPair(a,b){if(a?.layerBase)return validatedPair(a.layerBase,b)&&validatedPair(a.layerOuter,b);if(b?.layerBase)return validatedPair(a,b.layerBase)&&validatedPair(a,b.layerOuter);const key=[a.item_code,b.item_code].sort().join('::');return trainedPairType(a,b)?trainerEligible(a,b)&&state.pairs[key]===true:state.pairs[key]!==false}
