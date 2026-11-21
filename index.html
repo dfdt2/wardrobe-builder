@@ -308,7 +308,7 @@ function sharedTrainableActivity(a,b){
 }
 function layerRole(g){return ['base','outer'].includes(g?.layering_role)?g.layering_role:'none'}
 function isLayerPair(a,b){return ['Tops','Dresses'].includes(a.category)&&['Tops','Dresses'].includes(b.category)&&!(a.category==='Dresses'&&b.category==='Dresses')&&((layerRole(a)==='base'&&layerRole(b)==='outer')||(layerRole(b)==='base'&&layerRole(a)==='outer'))}
-function pairTrainable(a,b){const role=g=>g.category==='Other'?({Hats:'hat',Scarves:'scarf',Gloves:'gloves',Belts:'belt'})[g.subcategory]:g.category==='Tops'?'top':['Pants','Skirts'].includes(g.category)?'bottom':g.category==='Shoes'?'shoes':g.category==='Outerwear'?'outer':g.category==='Bags'?'bag':g.category==='Dresses'?'dress':null;const x=role(a),y=role(b);const allowed=new Set(['bottom|top','bottom|shoes','bottom|outer','outer|top','dress|outer','dress|shoes','bag|top','bag|outer','bag|dress','hat|outer','gloves|outer','outer|scarf','scarf|top','dress|scarf','hat|scarf','gloves|scarf','gloves|hat','belt|bottom']);return isLayerPair(a,b)||!!(x&&y&&allowed.has([x,y].sort().join('|'))&&!(x==='belt'&&b.category!=='Pants'&&b.category!=='Skirts')&&!(y==='belt'&&a.category!=='Pants'&&a.category!=='Skirts'))}
+function pairTrainable(a,b){const role=g=>g.category==='Other'?({Hats:'hat',Scarves:'scarf',Gloves:'gloves',Belts:'belt'})[g.subcategory]:g.category==='Tops'?'top':['Pants','Skirts'].includes(g.category)?'bottom':g.category==='Shoes'?'shoes':g.category==='Outerwear'?'outer':g.category==='Bags'?'bag':g.category==='Dresses'?'dress':null;const x=role(a),y=role(b);const allowed=new Set(['bottom|top','bottom|shoes','bottom|outer','outer|top','dress|outer','dress|shoes','bag|top','bag|outer','bag|dress','hat|outer','gloves|outer','gloves|top','hat|top','outer|scarf','scarf|top','dress|scarf','hat|scarf','gloves|scarf','gloves|hat','belt|bottom']);return isLayerPair(a,b)||!!(x&&y&&allowed.has([x,y].sort().join('|'))&&!(x==='belt'&&b.category!=='Pants'&&b.category!=='Skirts')&&!(y==='belt'&&a.category!=='Pants'&&a.category!=='Skirts'))}
 function pruneIneligiblePairs(){
  const byCode=new Map(state.items.map(x=>[x.item_code,x]));
  let changed=false;
@@ -321,7 +321,7 @@ function pruneIneligiblePairs(){
 function allPairs(){
  const result=[], items=state.items;
  const role=(c,g)=>c==='Other'?({'Hats':'hat','Scarves':'scarf','Gloves':'gloves','Belts':'belt'}[g.subcategory]||null):c==='Tops'?'top':(['Pants','Skirts'].includes(c)?'bottom':c==='Shoes'?'shoes':c==='Outerwear'?'outer':c==='Bags'?'bag':c==='Dresses'?'dress':null);
- const allowed=new Set(['bottom|top','bottom|shoes','bottom|outer','outer|top','dress|outer','dress|shoes','bag|top','bag|outer','bag|dress','hat|outer','gloves|outer','outer|scarf','scarf|top','dress|scarf','hat|scarf','gloves|scarf','gloves|hat']);
+ const allowed=new Set(['bottom|top','bottom|shoes','bottom|outer','outer|top','dress|outer','dress|shoes','bag|top','bag|outer','bag|dress','hat|outer','gloves|outer','gloves|top','hat|top','outer|scarf','scarf|top','dress|scarf','hat|scarf','gloves|scarf','gloves|hat']);
  for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++){
    let a=role(items[i].category,items[i]),b=role(items[j].category,items[j]);
    if(a&&b&&(allowed.has([a,b].sort().join('|'))||(a==='belt'&&['Pants','Skirts'].includes(items[j].category))||(b==='belt'&&['Pants','Skirts'].includes(items[i].category))||isLayerPair(items[i],items[j]))&&homePairAllowed(items[i],items[j])&&sharedTrainableActivity(items[i],items[j]))result.push([items[i],items[j]]);
@@ -344,7 +344,7 @@ function trainerCurrent(){
   if(!trainerRandomQueue.length)shuffleTrainer();
   return trainerPairByKey(trainerRandomQueue[0])||pending[0];
 }
-const TRAINER_RULE_LABELS=['Pants or skirts ↔ Tops','Pants or skirts ↔ Shoes','Pants or skirts ↔ Outerwear','Pants or skirts ↔ Belts','Base Layer → Outer Layer','Tops ↔ Outerwear','Dresses ↔ Outerwear','Dresses ↔ Shoes','Bags ↔ Tops','Bags ↔ Outerwear','Bags ↔ Dresses','Hats ↔ Outerwear','Gloves ↔ Outerwear','Scarves ↔ Outerwear','Scarves ↔ Tops','Scarves ↔ Dresses','Hats ↔ Scarves','Gloves ↔ Scarves','Gloves ↔ Hats'];
+const TRAINER_RULE_LABELS=['Pants or skirts ↔ Tops','Pants or skirts ↔ Shoes','Pants or skirts ↔ Outerwear','Pants or skirts ↔ Belts','Base Layer → Outer Layer','Tops ↔ Outerwear','Dresses ↔ Outerwear','Dresses ↔ Shoes','Bags ↔ Tops','Bags ↔ Outerwear','Bags ↔ Dresses','Hats ↔ Outerwear','Gloves ↔ Outerwear','Hats ↔ Tops','Gloves ↔ Tops','Scarves ↔ Outerwear','Scarves ↔ Tops','Scarves ↔ Dresses','Hats ↔ Scarves','Gloves ↔ Scarves','Gloves ↔ Hats'];
 function trainerRuleSummary(){return '<div class="panel" style="margin-top:18px"><h3>Active compatibility rules</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:7px 15px;font-size:12px">'+TRAINER_RULE_LABELS.map(v=>'<div>• '+esc(v)+'</div>').join('')+'</div></div>'}
 function renderTrainer(m){
  setTitle('Compatibility');
