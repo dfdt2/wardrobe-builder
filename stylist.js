@@ -470,6 +470,27 @@ function garmentOrderKey(role,code){
  for(let i=0;i<key.length;i++)hash=Math.imul(hash^key.charCodeAt(i),16777619)>>>0;
  return hash;
 }
+function topWearCount(item){
+ // Layered looks are ranked by their underlying base top or dress.
+ const base=item?.layerBase||item;
+ const source=state.items.find(x=>x.item_code===base?.item_code)||base;
+ return Math.max(0,Number(source?.wear_count)||0);
+}
+function compareRoleGarments(role,a,b){
+ if(role==='top'){
+  const difference=topWearCount(a)-topWearCount(b);
+  if(difference)return difference;
+ }
+ return garmentOrderKey(role,a?.item_code||NONE)-garmentOrderKey(role,b?.item_code||NONE);
+}
+function compareRoleCodes(role,a,b,variants){
+ if(role!=='top')return garmentOrderKey(role,a)-garmentOrderKey(role,b);
+ const garments=new Map();
+ for(const variant of variants)for(const garment of variant.garments){
+  if(roleOf(garment)==='top'||group(garment.category)==='dress')garments.set(garment.item_code,garment);
+ }
+ return compareRoleGarments(role,garments.get(a),garments.get(b));
+}
 function outfitOrderKey(variant){
  const key=variant.garments.map(g=>String(g.item_code)).sort().join('::');
  let hash=(2166136261^outfitOrderSeed)>>>0;
@@ -558,9 +579,13 @@ function results(){
   // Preserve unlocked state after changing conditions or using Clear locks.
   slotSelection={};previewNoneRoles.clear();
  }
- // Initialize a default top lock, favoring a real top when available.
- if(lockedRoles.has('top')&&!slotSelection.top){
-  const tops=[...new Set(g.variants.map(v=>itemCode(v,'top')).filter(Boolean))].sort((a,b)=>garmentOrderKey('top',a)-garmentOrderKey('top',b)); if(tops.length)slotSelection.top=tops[0];else lockedRoles.delete('top');
+ // Start the top/dress carousel on its first, least-worn eligible garment.
+ // This is an initial selection, not an additional lock.
+ if(!slotSelection.top){
+  const tops=[...new Set(g.variants.map(v=>itemCode(v,'top')).filter(Boolean))]
+   .sort((a,b)=>compareRoleCodes('top',a,b,g.variants));
+  if(tops.length)slotSelection.top=tops[0];
+  else lockedRoles.delete('top');
  }
  // If a lock has become impossible (e.g. data changed), recover without trapping the user.
  let matching=matchingLocks(g);
@@ -589,7 +614,7 @@ function results(){
  const labels={top:'Top / dress',outer:'Jacket',bottom:'Pants / skirt',shoe:'Shoes',bag:'Bag',hat:'Hat',scarf:'Scarf',gloves:'Gloves',belt:'Belt'};
  const noOuterWarning=(explicitlyNone('outer')||previewNoneRoles.has('outer'))&&!ST.activities.every(a=>a.type==='Home')&&scheduleHours().some(h=>{const temp=ST.weather?.[h]?.temp;return Number.isFinite(temp)&&layeredComfortError(temp,baseWarmth,null)>2.5;});
  const slots=SLOT_ORDER.map(role=>{
-  const possible=[...new Map(optionsForSlot(g,role).map(v=>{const item=garmentFor(v,role);return [item?.item_code||NONE,item]})).values()].sort((a,b)=>garmentOrderKey(role,a?.item_code||NONE)-garmentOrderKey(role,b?.item_code||NONE));
+  const possible=[...new Map(optionsForSlot(g,role).map(v=>{const item=garmentFor(v,role);return [item?.item_code||NONE,item]})).values()].sort((a,b)=>compareRoleGarments(role,a,b));
   if(OPTIONAL_ROLES.has(role)&&!possible.includes(null))possible.push(null);
   const current=previewNoneRoles.has(role)||(jacketRemoved&&['scarf','hat','gloves'].includes(role))?null:garmentFor(chosen,role),code=current?.item_code||NONE;
   const index=possible.findIndex(x=>(x?.item_code||NONE)===code);
@@ -612,7 +637,7 @@ function results(){
 function cycleSlot(role,step){
  const g=build()?.[ST.cluster];if(!g)return;
  const variants=optionsForSlot(g,role);
- const options=[...new Set(variants.map(v=>selectedCode(v,role)))].sort((a,b)=>garmentOrderKey(role,a)-garmentOrderKey(role,b));
+ const options=[...new Set(variants.map(v=>selectedCode(v,role)))].sort((a,b)=>compareRoleCodes(role,a,b,variants));
  if(OPTIONAL_ROLES.has(role)&&!options.includes(NONE))options.push(NONE);
  if(options.length<2)return;
  const current=slotSelection[role]||selectedCode(variants[0],role);
