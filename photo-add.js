@@ -18,7 +18,15 @@
     c.getContext('2d',{willReadFrequently:true}).drawImage(img,0,0,c.width,c.height);return c;
   };
   const canvasCopy = src => {const c=document.createElement('canvas');c.width=src.width;c.height=src.height;c.getContext('2d').drawImage(src,0,0);return c};
-  const editorHTML = () => '<div id="photo-edit-overlay" role="dialog" aria-modal="true" aria-label="Garment photo editor"><div class="photo-edit-head"><button type="button" id="photo-edit-cancel">Cancel</button><strong>Edit garment image</strong><button type="button" id="photo-edit-done">Done</button></div><div class="photo-edit-preview"><canvas id="photo-edit-canvas"></canvas></div><div class="photo-edit-actions"><button type="button" id="photo-remove-bg">Remove background (AI)</button><button type="button" id="photo-rotate">Rotate 90°</button><button type="button" id="photo-crop">Crop edges</button><button type="button" id="photo-undo">Undo</button><button type="button" id="photo-reset">Original</button></div><div class="photo-edit-tabs"><button type="button" data-photo-tool="adjust" class="active">Adjust</button><button type="button" data-photo-tool="erase">Erase</button><button type="button" data-photo-tool="restore">Restore</button></div><div id="photo-adjust-panel"><label>Brightness <input type="range" id="photo-brightness" min="-100" max="100" value="0"></label><label>Contrast <input type="range" id="photo-contrast" min="-100" max="100" value="0"></label><label>Temperature <input type="range" id="photo-temperature" min="-100" max="100" value="0"></label><label>Saturation <input type="range" id="photo-saturation" min="-100" max="100" value="0"></label><label>Tint <input type="range" id="photo-tint" min="-100" max="100" value="0"></label></div><div id="photo-brush-panel" hidden><label>Brush <input type="range" id="photo-brush" min="5" max="120" value="45"></label><label>Offset <input type="range" id="photo-offset" min="-60" max="60" value="0"></label><p class="photo-hint">Drag on the garment to erase unwanted areas or restore original pixels.</p></div><p id="photo-edit-status" role="status"></p></div>';
+  const editorHTML = () => `<div id="photo-edit-overlay" role="dialog" aria-modal="true" aria-label="Edit garment photo">
+    <div class="photo-edit-head"><button type="button" id="photo-edit-cancel" aria-label="Back">‹</button><strong>Edit photo</strong><button type="button" id="photo-edit-done" aria-label="Continue to details">✓</button></div>
+    <div class="photo-edit-preview"><div class="photo-edit-stage" id="photo-edit-stage"><canvas id="photo-edit-canvas"></canvas><div id="photo-crop-box" hidden><i data-crop-handle="nw"></i><i data-crop-handle="ne"></i><i data-crop-handle="sw"></i><i data-crop-handle="se"></i></div></div></div>
+    <div class="photo-edit-actions"><button type="button" id="photo-remove-bg">Remove background</button><button type="button" id="photo-rotate">Rotate 90°</button><button type="button" id="photo-crop">Crop / Rotate</button><button type="button" id="photo-zoom-out">−</button><span id="photo-zoom-label">100%</span><button type="button" id="photo-zoom-in">+</button><button type="button" id="photo-undo">Undo</button><button type="button" id="photo-reset">Original</button></div>
+    <div class="photo-edit-tabs"><button type="button" data-photo-tool="adjust" class="active">Adjust</button><button type="button" data-photo-tool="erase">Erase</button><button type="button" data-photo-tool="restore">Restore</button></div>
+    <div id="photo-adjust-panel"><label>Brightness<input type="range" id="photo-brightness" min="-100" max="100" value="0"></label><label>Contrast<input type="range" id="photo-contrast" min="-100" max="100" value="0"></label><label>Temperature<input type="range" id="photo-temperature" min="-100" max="100" value="0"></label><label>Saturation<input type="range" id="photo-saturation" min="-100" max="100" value="0"></label><label>Tint<input type="range" id="photo-tint" min="-100" max="100" value="0"></label></div>
+    <div id="photo-brush-panel" hidden><label>Brush size<input type="range" id="photo-brush" min="4" max="100" value="28"></label><p class="photo-hint">Draw over the image to erase or restore. Use + / − to zoom for detailed edits.</p></div>
+    <div id="photo-crop-controls" hidden><button type="button" id="photo-crop-apply">Apply crop</button><button type="button" id="photo-crop-cancel">Cancel crop</button><p class="photo-hint">Drag the crop corners or move the rectangle to choose the saved area.</p></div><p id="photo-edit-status" role="status"></p>
+    </div>`;
   function renderPreview(){
     if(!current)return;
     const s=current, c=$('photo-edit-canvas');if(!c)return;c.width=s.base.width;c.height=s.base.height;
@@ -75,20 +83,62 @@
     }catch(e){status('Automatic category unavailable on this device. Select it manually.')}
   }
   function completed(){
-    if(!current)return;renderPreview();
-    const c=$('photo-edit-canvas');const preview=$('photo-add-preview'),file=$('photo-add-file');
-    const png=c.toDataURL('image/webp',0.85);window.wardrobePhotoEdited=png;
-    preview.src=png;preview.hidden=false;$('photo-add-edit').hidden=false;$('photo-add-clear').hidden=false;
-    const colors=colorSuggestion(c);const col=document.querySelector('#addform [name="colors"]');
+    if(!current)return;
+    if(current.tool==='crop'){applyCrop();return}
+    renderPreview();
+    const c=$('photo-edit-canvas'),preview=$('photo-add-preview');
+    window.wardrobePhotoEdited=c.toDataURL('image/webp',0.85);
+    if(preview){preview.src=window.wardrobePhotoEdited;preview.hidden=false}
+    const colors=colorSuggestion(c),col=document.querySelector('#addform [name="colors"]');
     if(col&&!col.value&&colors.length)col.value=colors.join(', ');
-    const pattern=document.querySelector('#addform [name="pattern"]');
-    if(pattern&&!pattern.value)pattern.value='';
-    const classificationPhoto=canvasCopy(c);window.wardrobePhotoHint='';close();suggestCategory(classificationPhoto);
+    const photo=canvasCopy(c);
+    close();
+    $('photo-step-select').hidden=true;$('photo-step-review').hidden=false;
+    suggestCategory(photo);
   }
   function close(){const e=$('photo-edit-overlay');if(e)e.remove();current=null}
-  function brush(e){if(!current||!['erase','restore'].includes(current.tool))return;const canvas=$('photo-edit-canvas'),rect=canvas.getBoundingClientRect(),w=canvas.width/rect.width,h=canvas.height/rect.height;
-    const offset=Number($('photo-offset').value),x=(e.clientX-rect.left)*w+offset*w,y=(e.clientY-rect.top)*h+offset*h;
-    const ctx=current.mask.getContext('2d');ctx.save();ctx.globalCompositeOperation=current.tool==='erase'?'destination-out':'source-over';ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x,y,Number($('photo-brush').value)*Math.max(w,h)/1000,0,Math.PI*2);ctx.fill();ctx.restore();renderPreview();
+  function setTool(tool){
+    if(!current)return;
+    current.tool=tool;
+    document.querySelectorAll('[data-photo-tool]').forEach(b=>b.classList.toggle('active',b.dataset.photoTool===tool));
+    $('photo-adjust-panel').hidden=tool!=='adjust';
+    $('photo-brush-panel').hidden=!['erase','restore'].includes(tool);
+    $('photo-crop-controls').hidden=tool!=='crop';
+    $('photo-crop-box').hidden=tool!=='crop';
+    status(tool==='erase'?'Brush on the image to remove pixels.':tool==='restore'?'Brush on the image to bring back pixels.':'');
+  }
+  function zoom(delta){if(!current)return;current.zoom=Math.max(1,Math.min(5,Math.round((current.zoom+delta)*10)/10));const c=$('photo-edit-canvas');c.style.width=(100*current.zoom)+'%';$('photo-zoom-label').textContent=Math.round(current.zoom*100)+'%'}
+  function brush(e){
+    if(!current||!['erase','restore'].includes(current.tool))return;
+    const canvas=$('photo-edit-canvas'),rect=canvas.getBoundingClientRect();
+    const x=(e.clientX-rect.left)*canvas.width/rect.width,y=(e.clientY-rect.top)*canvas.height/rect.height;
+    const ctx=current.mask.getContext('2d');
+    const radius=Number($('photo-brush').value)*Math.max(canvas.width,canvas.height)/1700;
+    ctx.save();ctx.globalCompositeOperation=current.tool==='erase'?'destination-out':'source-over';ctx.fillStyle='#fff';
+    ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=2*radius;
+    if(current.lastPoint){ctx.beginPath();ctx.moveTo(current.lastPoint.x,current.lastPoint.y);ctx.lineTo(x,y);ctx.stroke()}
+    ctx.beginPath();ctx.arc(x,y,radius,0,Math.PI*2);ctx.fill();ctx.restore();
+    current.lastPoint={x,y};renderPreview();
+  }
+  function beginCrop(){
+    if(!current)return;
+    current.crop={x:.08,y:.08,w:.84,h:.84};setTool('crop');drawCrop();
+  }
+  function drawCrop(){
+    if(!current?.crop)return;const c=current.crop,box=$('photo-crop-box');
+    Object.assign(box.style,{left:c.x*100+'%',top:c.y*100+'%',width:c.w*100+'%',height:c.h*100+'%'});
+  }
+  function applyCrop(){
+    const s=current;if(!s?.crop)return;
+    storeUndo();
+    const {x,y,w,h}=s.crop;
+    const px=Math.round(x*s.base.width),py=Math.round(y*s.base.height);
+    const width=Math.max(1,Math.round(w*s.base.width)),height=Math.max(1,Math.round(h*s.base.height));
+    for(const key of ['base','mask']){
+      const c=document.createElement('canvas');c.width=width;c.height=height;
+      c.getContext('2d').drawImage(s[key],px,py,width,height,0,0,width,height);s[key]=c;
+    }
+    s.crop=null;setTool('adjust');renderPreview();zoom(0);
   }
   async function removeBackground(){
     if(!current)return;const id=current.id,btn=$('photo-remove-bg');btn.disabled=true;status('Removing background with AI. First run downloads a model…');
@@ -114,22 +164,48 @@
     for(const name of ['base','mask']){const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(s[name],x,y,w,h,0,0,w,h);s[name]=c}renderPreview()}
   async function open(file){
     try{const img=await imageFromFile(file);const base=draw(img),mask=document.createElement('canvas');mask.width=base.width;mask.height=base.height;
-      current={id:++generation,original:canvasCopy(base),base,mask,history:[],tool:'adjust',drawing:false};resetMask();
+      current={id:++generation,original:canvasCopy(base),base,mask,history:[],tool:'adjust',drawing:false,zoom:1};resetMask();
       document.body.insertAdjacentHTML('beforeend',editorHTML());
-      $('photo-edit-cancel').onclick=close;$('photo-edit-done').onclick=completed;$('photo-remove-bg').onclick=removeBackground;$('photo-rotate').onclick=rotate;$('photo-crop').onclick=crop;
+      $('photo-edit-cancel').onclick=close;$('photo-edit-done').onclick=completed;$('photo-remove-bg').onclick=removeBackground;$('photo-rotate').onclick=rotate;$('photo-crop').onclick=beginCrop;
       $('photo-undo').onclick=()=>{const p=current.history.pop();if(p){current.base=p.base;current.mask=p.mask;renderPreview()}};
       $('photo-reset').onclick=()=>{storeUndo();replaceDimensions(canvasCopy(current.original));renderPreview()};
       for(const id of ['brightness','contrast','temperature','saturation','tint'])$('photo-'+id).oninput=renderPreview;
-      document.querySelectorAll('[data-photo-tool]').forEach(b=>b.onclick=()=>{current.tool=b.dataset.photoTool;document.querySelectorAll('[data-photo-tool]').forEach(x=>x.classList.toggle('active',x===b));$('photo-adjust-panel').hidden=current.tool!=='adjust';$('photo-brush-panel').hidden=current.tool==='adjust'});
-      const c=$('photo-edit-canvas');c.addEventListener('pointerdown',e=>{if(current.tool==='adjust')return;storeUndo();current.drawing=true;c.setPointerCapture(e.pointerId);brush(e)});
-      c.addEventListener('pointermove',e=>{if(current?.drawing)brush(e)});c.addEventListener('pointerup',()=>{if(current)current.drawing=false});
+      document.querySelectorAll('[data-photo-tool]').forEach(b=>b.onclick=()=>setTool(b.dataset.photoTool));
+      const c=$('photo-edit-canvas');
+      c.addEventListener('pointerdown',e=>{if(!['erase','restore'].includes(current?.tool))return;storeUndo();current.drawing=true;current.lastPoint=null;c.setPointerCapture(e.pointerId);brush(e)});
+      c.addEventListener('pointermove',e=>{if(current?.drawing)brush(e)});
+      for(const event of ['pointerup','pointercancel','lostpointercapture'])c.addEventListener(event,()=>{if(current){current.drawing=false;current.lastPoint=null}});
+      $('photo-zoom-in').onclick=()=>zoom(.5);$('photo-zoom-out').onclick=()=>zoom(-.5);
+      $('photo-crop-apply').onclick=applyCrop;$('photo-crop-cancel').onclick=()=>{current.crop=null;setTool('adjust')};
+      const cropBox=$('photo-crop-box');cropBox.addEventListener('pointerdown',e=>{
+        if(!current?.crop)return;
+        e.preventDefault();e.stopPropagation();cropBox.setPointerCapture(e.pointerId);
+        const bounds=$('photo-edit-canvas').getBoundingClientRect();
+        current.cropDrag={startX:e.clientX,startY:e.clientY,origin:{...current.crop},handle:e.target.dataset.cropHandle||'move',bounds};
+      });
+      cropBox.addEventListener('pointermove',e=>{
+        if(!current?.cropDrag)return;
+        const d=current.cropDrag,dx=(e.clientX-d.startX)/d.bounds.width,dy=(e.clientY-d.startY)/d.bounds.height;
+        let {x,y,w,h}=d.origin;
+        if(d.handle==='move'){x=Math.max(0,Math.min(1-w,x+dx));y=Math.max(0,Math.min(1-h,y+dy))}
+        else{
+          if(d.handle.includes('w')){const nx=Math.max(0,Math.min(x+w-.08,x+dx));w+=x-nx;x=nx}
+          if(d.handle.includes('e'))w=Math.max(.08,Math.min(1-x,w+dx));
+          if(d.handle.includes('n')){const ny=Math.max(0,Math.min(y+h-.08,y+dy));h+=y-ny;y=ny}
+          if(d.handle.includes('s'))h=Math.max(.08,Math.min(1-y,h+dy));
+        }
+        current.crop={x,y,w,h};drawCrop();
+      });
+      for(const event of ['pointerup','pointercancel','lostpointercapture'])cropBox.addEventListener(event,()=>{if(current)current.cropDrag=null});
       renderPreview();removeBackground();
     }catch(e){alert('Could not load photo: '+e.message)}
   }
   window.initWardrobePhotoAdd=function(){
+    window.wardrobePhotoEdited=null;
     const input=$('photo-add-file');if(!input)return;
     input.onchange=()=>{const f=input.files?.[0];if(f)open(f)};
-    const edit=$('photo-add-edit');if(edit)edit.onclick=async()=>{const f=input.files?.[0];if(f)open(f)};
-    const clear=$('photo-add-clear');if(clear)clear.onclick=()=>{window.wardrobePhotoEdited=null;input.value='';$('photo-add-preview').hidden=true;edit.hidden=true;clear.hidden=true};
+    $('photo-review-back').onclick=async()=>{
+      const f=input.files?.[0];if(f)await open(f);
+    };
   };
 })();
