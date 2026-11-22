@@ -50,15 +50,15 @@
     }
     return [...counts].sort((a,b)=>b[1]-a[1]).filter(x=>x[1]>sample*.09).slice(0,2).map(x=>x[0]);
   }
-  async function suggestCategory(){
+  async function suggestCategory(photo){
     try {
       status('Checking garment type…');
       await load('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
       await load('https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js');
       if(!window.mobilenet)throw Error('Image model missing');
       window.wardrobePhotoModel ||= await window.mobilenet.load({version:2,alpha:0.5});
-      if(!current)return;
-      const classes=await window.wardrobePhotoModel.classify(current.base,5);
+      if(!document.querySelector("#addform"))return;
+      const classes=await window.wardrobePhotoModel.classify(photo,5);
       const names=classes.map(x=>x.className.toLowerCase()).join(' | ');
       let guess=null;
       if(/running shoe|sneaker|loafer|sandal|boot|slipper|shoe/.test(names))guess='Shoes';
@@ -77,13 +77,13 @@
   function completed(){
     if(!current)return;renderPreview();
     const c=$('photo-edit-canvas');const preview=$('photo-add-preview'),file=$('photo-add-file');
-    const png=c.toDataURL('image/png');window.wardrobePhotoEdited=png;
-    preview.src=png;preview.hidden=false;$('photo-add-edit').hidden=false;
+    const png=c.toDataURL('image/webp',0.85);window.wardrobePhotoEdited=png;
+    preview.src=png;preview.hidden=false;$('photo-add-edit').hidden=false;$('photo-add-clear').hidden=false;
     const colors=colorSuggestion(c);const col=document.querySelector('#addform [name="colors"]');
     if(col&&!col.value&&colors.length)col.value=colors.join(', ');
     const pattern=document.querySelector('#addform [name="pattern"]');
     if(pattern&&!pattern.value)pattern.value='';
-    window.wardrobePhotoHint='';close();suggestCategory();
+    const classificationPhoto=canvasCopy(c);window.wardrobePhotoHint='';close();suggestCategory(classificationPhoto);
   }
   function close(){const e=$('photo-edit-overlay');if(e)e.remove();current=null}
   function brush(e){if(!current||!['erase','restore'].includes(current.tool))return;const canvas=$('photo-edit-canvas'),rect=canvas.getBoundingClientRect(),w=canvas.width/rect.width,h=canvas.height/rect.height;
