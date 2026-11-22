@@ -281,7 +281,18 @@ function* buildUncached(){
  const maxWarmth=role=>Math.max(0,...allOptions[role].filter(Boolean).map(warmth));
  const roleWarmthMax={bottom:maxWarmth('bottom'),shoe:maxWarmth('shoe'),outer:maxWarmth('outer'),scarf:maxWarmth('scarf'),gloves:maxWarmth('gloves'),hat:maxWarmth('hat'),belt:0,tights:maxWarmth('tights')};
  const coldLimit=temperatures.length?70-Math.min(...temperatures):null;
- const permits=(items,candidate)=>!candidate||items.every(other=>!other||validatedPair(other,candidate));
+ const permits=(items,candidate)=>{
+  if(!candidate)return true;
+  // Belts require a positive Trainer vote with the chosen pants, even when
+  // a pants subtype isn't eligible for belt training (no implicit fallback).
+  const belt=roleOf(candidate)==='belt'?candidate:items.find(x=>roleOf(x)==='belt');
+  if(belt){
+    const bottom=roleOf(candidate)==='bottom'?candidate:items.find(x=>roleOf(x)==='bottom');
+    if(bottom&&(!beltBottomAllowed(bottom)||!trainerEligible(belt,bottom)||
+      state.pairs[[belt.item_code,bottom.item_code].sort().join('::')]!==true))return false;
+  }
+  return items.every(other=>!other||validatedPair(other,candidate));
+ };
  const variants=[];
  const seen=new Set();
  let explored=0;
@@ -352,7 +363,17 @@ function* buildUncached(){
    let choices=allOptions[role];
    // Dresses are displayed in the top slot and do not have a separate bottom.
    if(role==='bottom')choices=picked.top&&roleOf(picked.top)==='dress'?[null]:allOptions.bottom.filter(Boolean);
-   if(role==='belt'&&!picked.bottom)choices=[null];
+   if(role==='belt'){
+    // Belts are never inferred compatible: only an eligible, explicitly
+    // approved belt–bottom pairing may enter an outfit.
+    const bottom=picked.bottom;
+    choices=bottom&&beltBottomAllowed(bottom)
+      ?allOptions.belt.filter(b=>!b||(
+        trainerEligible(b,bottom)&&
+        state.pairs[[b.item_code,bottom.item_code].sort().join('::')]===true
+      ))
+      :[null];
+   }
    // A single pair of tights may be worn underneath one dress or one bottom.
    if(role==='tights'&&!picked.bottom&&roleOf(picked.top)!=='dress')choices=[null];
     if(role==='top'&&!choices.length)return null;
