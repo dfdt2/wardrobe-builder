@@ -78,6 +78,9 @@
       else if(/sweatshirt|jersey|cardigan|sweater|shirt|t-shirt/.test(names))guess='Tops';
       if(guess&&typeof WARDROBE_CATEGORIES!=='undefined'&&WARDROBE_CATEGORIES[guess]){
         const select=document.querySelector('#addform [name="category"]');if(select) {select.value=guess;select.dispatchEvent(new Event('change',{bubbles:true}));}
+        const subtype=guess==='Pants'?(/jean/.test(names)?'Jeans':/trouser/.test(names)?'Trousers':null):guess==='Tops'?(/sweater/.test(names)?'Sweater':/sweatshirt/.test(names)?'Sweatshirt':/t-shirt/.test(names)?'T-shirt':null):guess==='Shoes'?(/boot/.test(names)?'Boots':/sandal/.test(names)?'Sandals':/loafer/.test(names)?'Loafers':/running shoe/.test(names)?'Sneakers':null):guess==='Outerwear'?(/trench/.test(names)?'Trench coat':/jacket/.test(names)?'Jacket':null):null;
+        const sub=document.querySelector('#addform [name="subcategory"]');if(sub&&subtype&&[...sub.options].some(o=>o.value===subtype))sub.value=subtype;
+        const title=document.querySelector('#addform [name="name"]');if(title&&!title.value){const color=document.querySelector('#addform [name="colors"]')?.value.split(',')[0]?.trim()||'';title.value=[color,subtype||guess].filter(Boolean).join(' ')}
         status('Suggested category: '+guess+' (review before saving)');
       }else status('Category could not be identified confidently. Select it manually.');
     }catch(e){status('Automatic category unavailable on this device. Select it manually.')}
@@ -162,7 +165,7 @@
     for(let y=0;y<s.mask.height;y+=2)for(let x=0;x<s.mask.width;x+=2)if(d[(y*s.mask.width+x)*4+3]>80){minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y)}
     if(minX>maxX){status('Nothing visible to crop');return}storeUndo();const pad=Math.round(Math.max(s.mask.width,s.mask.height)*.025);const x=Math.max(0,minX-pad),y=Math.max(0,minY-pad),w=Math.min(s.base.width-x,maxX-x+pad+2),h=Math.min(s.base.height-y,maxY-y+pad+2);
     for(const name of ['base','mask']){const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(s[name],x,y,w,h,0,0,w,h);s[name]=c}renderPreview()}
-  async function open(file){
+  async function open(file,skipAI=false){
     try{const img=await imageFromFile(file);const base=draw(img),mask=document.createElement('canvas');mask.width=base.width;mask.height=base.height;
       current={id:++generation,original:canvasCopy(base),base,mask,history:[],tool:'adjust',drawing:false,zoom:1};resetMask();
       document.body.insertAdjacentHTML('beforeend',editorHTML());
@@ -197,7 +200,7 @@
         current.crop={x,y,w,h};drawCrop();
       });
       for(const event of ['pointerup','pointercancel','lostpointercapture'])cropBox.addEventListener(event,()=>{if(current)current.cropDrag=null});
-      renderPreview();removeBackground();
+      renderPreview();if(!skipAI)removeBackground();
     }catch(e){alert('Could not load photo: '+e.message)}
   }
   window.initWardrobePhotoAdd=function(){
@@ -205,7 +208,7 @@
     const input=$('photo-add-file');if(!input)return;
     input.onchange=()=>{const f=input.files?.[0];if(f)open(f)};
     $('photo-review-back').onclick=async()=>{
-      const f=input.files?.[0];if(f)await open(f);
+      if(window.wardrobePhotoEdited){const blob=await (await fetch(window.wardrobePhotoEdited)).blob();await open(blob,true)}else{const f=input.files?.[0];if(f)await open(f)}
     };
   };
 })();
