@@ -493,7 +493,7 @@ function outfitOrderKey(variant){
  for(let i=0;i<key.length;i++){hash=Math.imul(hash^key.charCodeAt(i),16777619)>>>0;}
  return hash;
 }
-const SLOT_ORDER=['top','outer','bottom','tights','shoe','bag','scarf','gloves','hat','belt'];
+const SLOT_ORDER=['top','outer','bottom','shoe','bag','scarf','gloves','hat','tights','belt'];
 let slotSelection={};
 // An unlocked None is a browsable preview, not a validation override or an implicit lock.
 let previewNoneRoles=new Set();
