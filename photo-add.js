@@ -22,11 +22,11 @@
   const editorHTML = () => `<div id="photo-edit-overlay" role="dialog" aria-modal="true" aria-label="Edit garment photo">
     <div class="photo-edit-head"><button type="button" id="photo-edit-cancel" aria-label="Back">‹</button><strong>Edit photo</strong><button type="button" id="photo-edit-done" aria-label="Continue to details">✓</button></div>
     <div class="photo-edit-preview"><div class="photo-edit-stage" id="photo-edit-stage"><canvas id="photo-edit-canvas"></canvas><div id="photo-crop-box" hidden><i data-crop-handle="nw"></i><i data-crop-handle="ne"></i><i data-crop-handle="sw"></i><i data-crop-handle="se"></i></div></div></div>
-    <div class="photo-edit-actions"><button type="button" id="photo-remove-bg">Remove background</button><button type="button" id="photo-rotate">Rotate 90°</button><button type="button" id="photo-crop">Crop / Rotate</button><button type="button" id="photo-zoom-out">−</button><span id="photo-zoom-label">100%</span><button type="button" id="photo-zoom-in">+</button><button type="button" id="photo-undo">Undo</button><button type="button" id="photo-reset">Original</button></div>
-    <div class="photo-edit-tabs"><button type="button" data-photo-tool="adjust" class="active">Adjust</button><button type="button" data-photo-tool="erase">Erase</button><button type="button" data-photo-tool="restore">Restore</button></div>
+    <div class="photo-edit-tabs photo-toolstrip"><button type="button" data-photo-tool="adjust" class="active">Adjust</button><button type="button" data-photo-tool="crop">Crop</button><button type="button" data-photo-tool="erase">Erase / Restore</button><button type="button" id="photo-undo">Undo</button><button type="button" id="photo-reset">Original</button></div>
     <div id="photo-adjust-panel"><label>Brightness<input type="range" id="photo-brightness" min="-100" max="100" value="0"></label><label>Contrast<input type="range" id="photo-contrast" min="-100" max="100" value="0"></label><label>Temperature<input type="range" id="photo-temperature" min="-100" max="100" value="0"></label><label>Saturation<input type="range" id="photo-saturation" min="-100" max="100" value="0"></label><label>Tint<input type="range" id="photo-tint" min="-100" max="100" value="0"></label></div>
-    <div id="photo-brush-panel" hidden><label>Brush size<input type="range" id="photo-brush" min="4" max="100" value="28"></label><p class="photo-hint">Draw over the image to erase or restore. Use + / − to zoom for detailed edits.</p></div>
-    <div id="photo-crop-controls" hidden><button type="button" id="photo-crop-apply">Apply crop</button><button type="button" id="photo-crop-cancel">Cancel crop</button><p class="photo-hint">Drag the crop corners or move the rectangle to choose the saved area.</p></div><p id="photo-edit-status" role="status"></p>
+    <div id="photo-brush-panel" hidden><div class="photo-brush-modes"><button type="button" id="photo-brush-erase" class="active" aria-pressed="true">Erase</button><button type="button" id="photo-brush-restore" aria-pressed="false">Restore</button></div><label>Brush size<input type="range" id="photo-brush" min="4" max="100" value="28"></label></div>
+    <div id="photo-crop-controls" hidden><button type="button" id="photo-rotate">Rotate 90°</button><button type="button" id="photo-crop-apply">Apply crop</button><button type="button" id="photo-crop-cancel">Cancel</button></div><p id="photo-edit-status" role="status" aria-live="polite"></p>
+    <div id="photo-loading" class="photo-loading" role="status" aria-live="polite" hidden><div class="photo-loading-spinner" aria-hidden="true"></div><strong>Removing background…</strong><span>Processing your photo</span></div>
     </div>`;
   function renderPreview(){
     if(!current)return;
@@ -119,9 +119,41 @@
     $('photo-brush-panel').hidden=!['erase','restore'].includes(tool);
     $('photo-crop-controls').hidden=tool!=='crop';
     $('photo-crop-box').hidden=tool!=='crop';
-    status(tool==='erase'?'Brush on the image to remove pixels.':tool==='restore'?'Brush on the image to bring back pixels.':'');
+    if(tool==='erase'||tool==='restore')setBrushMode(tool);else status('');
   }
-  function zoom(delta){if(!current)return;current.zoom=Math.max(1,Math.min(5,Math.round((current.zoom+delta)*10)/10));const c=$('photo-edit-canvas');c.style.width=(100*current.zoom)+'%';$('photo-zoom-label').textContent=Math.round(current.zoom*100)+'%'}
+  function setBrushMode(mode){
+    if(!current)return;current.tool=mode;
+    for(const kind of ['erase','restore']){
+      const b=$('photo-brush-'+kind);if(b){b.classList.toggle('active',mode===kind);b.setAttribute('aria-pressed',String(mode===kind))}
+    }
+    document.querySelectorAll('[data-photo-tool]').forEach(b=>b.classList.toggle('active',b.dataset.photoTool==='erase'));
+  }
+  function setZoom(value,anchor=null){
+    if(!current)return;
+    const preview=document.querySelector('#photo-edit-overlay .photo-edit-preview'),stage=$('photo-edit-stage');
+    if(!preview||!stage)return;
+    const before=stage.getBoundingClientRect(),frame=preview.getBoundingClientRect();
+    const point=anchor||{x:frame.left+frame.width/2,y:frame.top+frame.height/2};
+    const x=(point.x-before.left)/(before.width||1),y=(point.y-before.top)/(before.height||1);
+    current.zoom=Math.max(1,Math.min(5,value));
+    stage.style.width='min(calc(95% * '+current.zoom+'), '+(540*current.zoom)+'px)';
+    const after=stage.getBoundingClientRect();
+    preview.scrollLeft+=after.left+x*after.width-point.x;
+    preview.scrollTop+=after.top+y*after.height-point.y;
+  }
+  function installPinchZoom(preview){
+    let pinch=null;
+    const distance=t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
+    const center=t=>({x:(t[0].clientX+t[1].clientX)/2,y:(t[0].clientY+t[1].clientY)/2});
+    preview.addEventListener('touchstart',e=>{
+      if(e.touches.length===2){if(current){current.drawing=false;current.lastPoint=null}pinch={distance:distance(e.touches),zoom:current?.zoom||1}}
+    },{passive:true});
+    preview.addEventListener('touchmove',e=>{
+      if(e.touches.length===2&&pinch&&current){e.preventDefault();setZoom(pinch.zoom*distance(e.touches)/Math.max(1,pinch.distance),center(e.touches))}
+    },{passive:false});
+    preview.addEventListener('touchend',e=>{if(e.touches.length<2)pinch=null},{passive:true});
+    preview.addEventListener('touchcancel',()=>{pinch=null},{passive:true});
+  }
   function brush(e){
     if(!current||!['erase','restore'].includes(current.tool))return;
     const canvas=$('photo-edit-canvas'),rect=canvas.getBoundingClientRect();
@@ -152,10 +184,10 @@
       const c=document.createElement('canvas');c.width=width;c.height=height;
       c.getContext('2d').drawImage(s[key],px,py,width,height,0,0,width,height);s[key]=c;
     }
-    s.crop=null;setTool('adjust');renderPreview();zoom(0);
+    s.crop=null;setTool('adjust');renderPreview();setZoom(1);
   }
   async function removeBackground(){
-    if(!current)return;const id=current.id,btn=$('photo-remove-bg');btn.disabled=true;status('Removing background with AI. First run downloads a model…');
+    if(!current)return;const id=current.id,loading=$('photo-loading');if(loading)loading.hidden=false;status('');
     try {
       const mod=await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm');
       if(!current||current.id!==id)return;
@@ -168,7 +200,7 @@
       for(let i=0;i<pixels.data.length;i+=4){pixels.data[i]=255;pixels.data[i+1]=255;pixels.data[i+2]=255}
       m.putImageData(pixels,0,0);renderPreview();status('Background removed. Use Erase / Restore to refine edges.');
     }catch(e){status('Automatic removal unavailable ('+(e.message||'model failed')+'). Manual Erase is available.')}
-    finally{if(btn)btn.disabled=false}
+    finally{if(loading)loading.hidden=true}
   }
   function rotate(){storeUndo();const s=current,c=document.createElement('canvas');c.width=s.base.height;c.height=s.base.width;const cx=c.getContext('2d');cx.translate(c.width,0);cx.rotate(Math.PI/2);cx.drawImage(s.base,0,0);
     const m=document.createElement('canvas');m.width=c.width;m.height=c.height;const mx=m.getContext('2d');mx.translate(m.width,0);mx.rotate(Math.PI/2);mx.drawImage(s.mask,0,0);s.base=c;s.mask=m;renderPreview()}
@@ -180,16 +212,17 @@
     try{const img=await imageFromFile(file);if($('photo-edit-overlay'))close();editorContext=context;const base=draw(img),mask=document.createElement('canvas');mask.width=base.width;mask.height=base.height;
       current={id:++generation,original:canvasCopy(base),base,mask,history:[],tool:'adjust',drawing:false,zoom:1};resetMask();
       document.body.insertAdjacentHTML('beforeend',editorHTML());
-      $('photo-edit-cancel').onclick=close;$('photo-edit-done').onclick=completed;$('photo-remove-bg').onclick=removeBackground;$('photo-rotate').onclick=rotate;$('photo-crop').onclick=beginCrop;
+      $('photo-edit-cancel').onclick=close;$('photo-edit-done').onclick=completed;$('photo-rotate').onclick=rotate;
       $('photo-undo').onclick=()=>{const p=current.history.pop();if(p){current.base=p.base;current.mask=p.mask;renderPreview()}};
       $('photo-reset').onclick=()=>{storeUndo();replaceDimensions(canvasCopy(current.original));renderPreview()};
       for(const id of ['brightness','contrast','temperature','saturation','tint'])$('photo-'+id).oninput=renderPreview;
-      document.querySelectorAll('[data-photo-tool]').forEach(b=>b.onclick=()=>setTool(b.dataset.photoTool));
+      document.querySelectorAll('[data-photo-tool]').forEach(b=>b.onclick=()=>{if(b.dataset.photoTool==='crop')beginCrop();else if(b.dataset.photoTool==='erase')setTool('erase');else{current.crop=null;setTool('adjust')}});
+      $('photo-brush-erase').onclick=()=>setBrushMode('erase');$('photo-brush-restore').onclick=()=>setBrushMode('restore');
       const c=$('photo-edit-canvas');
-      c.addEventListener('pointerdown',e=>{if(!['erase','restore'].includes(current?.tool))return;storeUndo();current.drawing=true;current.lastPoint=null;c.setPointerCapture(e.pointerId);brush(e)});
+      c.addEventListener('pointerdown',e=>{if(!['erase','restore'].includes(current?.tool)||e.pointerType==='touch'&&!e.isPrimary)return;storeUndo();current.drawing=true;current.lastPoint=null;c.setPointerCapture(e.pointerId);brush(e)});
       c.addEventListener('pointermove',e=>{if(current?.drawing)brush(e)});
       for(const event of ['pointerup','pointercancel','lostpointercapture'])c.addEventListener(event,()=>{if(current){current.drawing=false;current.lastPoint=null}});
-      $('photo-zoom-in').onclick=()=>zoom(.5);$('photo-zoom-out').onclick=()=>zoom(-.5);
+      installPinchZoom(document.querySelector('#photo-edit-overlay .photo-edit-preview'));
       $('photo-crop-apply').onclick=applyCrop;$('photo-crop-cancel').onclick=()=>{current.crop=null;setTool('adjust')};
       const cropBox=$('photo-crop-box');cropBox.addEventListener('pointerdown',e=>{
         if(!current?.crop)return;
