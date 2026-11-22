@@ -8,7 +8,7 @@ const DEFAULT_WORK_ADDRESS='100 Results Wy, Marlborough, MA 01752';
 const workAddress=()=>{try{return localStorage.getItem(WORK_ADDRESS_KEY)?.trim()||DEFAULT_WORK_ADDRESS}catch(e){return DEFAULT_WORK_ADDRESS}};
 const workSelected=()=>ST.activities.some(a=>a.type==='Work');
 const TYPES=['Daily','Work','Date','Home','Sport','Party','Dressy','Specialty','Business'];
-const SHORTS_MIN_F=50;
+const SHORTS_MIN_F=60;
 const RAIN_MIST_MAX_MM_H=0.2;
 window.wardrobeStylistRules={openToeMin:60,shortsMin:SHORTS_MIN_F,scarfBelow:60,glovesBelow:50,hatBelow:40,target:75,tolerance:2.5,rainMistMaxMm:RAIN_MIST_MAX_MM_H};
 const ACTIVITY_DEFAULT_TIMES={
