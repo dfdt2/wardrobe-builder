@@ -175,21 +175,21 @@ function updateRainNotice(){
  notice.style.display=rainDuringOuting()?'block':'none';
 }
 // Material restrictions apply only when rain heavier than mist is forecast.
-// Faux/vegan materials are not assumed to be genuine leather, suede or fur.
+// Keep the prior suede/nubuck restriction. Genuine fur is excluded in every
+// category, but genuine leather is excluded only for jackets/outerwear.
+// Leather shoes, bags, belts and other accessories remain eligible.
 function rainSensitiveGarment(g){
  const materials=Array.isArray(g.materials)?g.materials:[g.materials||''];
- const fauxPattern=/\b(faux|fake|vegan|synthetic|imitation|artificial|pu|polyurethane)\s*[- ]?\s*(leather|suede|nubuck|fur|shearling)\b|\b(pleather|leatherette)\b/i;
- const animalPattern=/\b(leather|suede|nubuck|fur|shearling|mink)\b/i;
- const genuineMaterial=materials.some(m=>animalPattern.test(String(m))&&!fauxPattern.test(String(m)));
- if(genuineMaterial)return true;
  const name=String(g.name||'');
  const tags=Array.isArray(g.style_tags)?g.style_tags:[];
- // When the garment itself is explicitly faux fur/leather, incidental mentions
- // such as "fur collar" must not override that classification.
- if(fauxPattern.test(name)&&!materials.some(m=>animalPattern.test(String(m))&&!fauxPattern.test(String(m))))return false;
- const descriptions=[name,...tags].join(' | ');
- const cleaned=descriptions.replace(/\b(faux|fake|vegan|synthetic|imitation|artificial|pu|polyurethane)\s*[- ]?\s*(leather|suede|nubuck|fur|shearling)\b|\b(pleather|leatherette)\b/gi,'');
- return animalPattern.test(cleaned)||g.subcategory==='Fur coat';
+ const fauxPattern=/\b(faux|fake|vegan|synthetic|imitation|artificial|pu|polyurethane)\s*[- ]?\s*(leather|suede|nubuck|fur|shearling)\b|\b(pleather|leatherette)\b/gi;
+ const genuineMaterialText=materials.map(m=>String(m).replace(fauxPattern,'')).join(' ');
+ const descriptionText=[name,...tags].map(v=>String(v).replace(fauxPattern,'')).join(' ');
+ const searchable=genuineMaterialText+' | '+descriptionText;
+ const isFur=/\b(fur|shearling|mink)\b/i.test(searchable)||g.subcategory==='Fur coat';
+ const isSuede=/\b(suede|nubuck)\b/i.test(searchable);
+ const isLeather=/\bleather\b/i.test(searchable);
+ return isFur||isSuede||(g.category==='Outerwear'&&isLeather);
 }
 // Require approval only for relationships that the trainer offers for evaluation.
 // Use exactly the same trained relationship types as allPairs() in the
