@@ -126,7 +126,7 @@ document.addEventListener('pointerup',finishTimeDrag);document.addEventListener(
 document.addEventListener('keydown',e=>{const h=e.target.closest('[data-range-handle]');if(state.page!=='stylist'||!h||!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;const bar=h.closest('[data-time-range]'),i=Number(bar.dataset.timeRange),k=h.dataset.rangeHandle,a=ST.activities[i];let n=a[k];if(e.key==='ArrowLeft')n--;if(e.key==='ArrowRight')n++;if(e.key==='Home')n=k==='start'?0:a.start+1;if(e.key==='End')n=k==='start'?a.end-1:24;moveTimeHandle(i,k,n);results();e.preventDefault()});
 
 function group(name){const n=String(name||'').toLowerCase();if(n==='tops'||n==='top')return 'top';if(['pants','skirts','shorts','bottoms'].includes(n))return 'bottom';if(['shoes','footwear'].includes(n))return 'shoe';if(['outerwear','jackets','coats'].includes(n))return 'outer';if(n==='dresses')return 'dress';if(n==='bags')return 'bag';return null}
-function accessoryRole(g){if(g.category!=='Other')return null;return ({Hats:'hat',Scarves:'scarf',Gloves:'gloves',Belts:'belt'})[g.subcategory]||null}
+function accessoryRole(g){if(g.category!=='Other')return null;return ({Hats:'hat',Scarves:'scarf',Gloves:'gloves',Belts:'belt',Tights:'tights'})[g.subcategory]||null}
 function roleOf(g){return accessoryRole(g)||group(g.category)}
 function warmth(g){return g?.layerBase?warmth(g.layerBase)+warmth(g.layerOuter):estimatedClo(g)*25} // °F contribution is a heuristic, not a physical conversion
 // Each garment contributes its full estimated warmth directly.
@@ -196,7 +196,7 @@ function rainSensitiveGarment(g){
 // compatibility trainer. A missing, excluded, or unreviewed trained pair is
 // never an implicit approval.
 const ROLE=(c,g)=>{const role=g?roleOf(g):c==='Tops'?'top':(['Pants','Skirts'].includes(c)?'bottom':c==='Shoes'?'shoe':c==='Outerwear'?'outer':c==='Bags'?'bag':c==='Dresses'?'dress':null);return role==='shoe'?'shoes':role;};
-const TRAINABLE=new Set(['bottom|top','shoes|top','bottom|shoes','bottom|outer','outer|top','dress|outer','dress|shoes','bag|top','bag|outer','bag|dress','hat|outer','gloves|outer','gloves|top','hat|top','outer|scarf','scarf|top','dress|scarf','hat|scarf','gloves|scarf','gloves|hat','belt|bottom']);
+const TRAINABLE=new Set(['bottom|top','shoes|top','bottom|shoes','bottom|outer','outer|top','dress|outer','dress|shoes','bag|top','bag|outer','bag|dress','hat|outer','gloves|outer','gloves|top','hat|top','outer|scarf','scarf|top','dress|scarf','hat|scarf','gloves|scarf','gloves|hat','belt|bottom','bottom|tights','dress|tights']);
 const trainedPairType=(a,b)=>pairTrainable(a,b);
 function trainerEligible(a,b){return trainedPairType(a,b)&&homePairAllowed(a,b)&&sharedTrainableActivity(a,b)}
 function validatedPair(a,b){if(a?.layerBase)return validatedPair(a.layerBase,b)&&validatedPair(a.layerOuter,b);if(b?.layerBase)return validatedPair(a,b.layerBase)&&validatedPair(a,b.layerOuter);const key=[a.item_code,b.item_code].sort().join('::');return trainedPairType(a,b)?trainerEligible(a,b)&&state.pairs[key]===true:state.pairs[key]!==false}
@@ -211,7 +211,7 @@ function validBaseOutfit(items,shoeOptional=false){
  return items.length===(dressLook?1+count('shoe'):2+count('shoe'))&&(dressLook||separatesLook);
 }
 const NONE='__NONE__';
-const OPTIONAL_ROLES=new Set(['outer','shoe','bag','scarf','hat','gloves','belt']);
+const OPTIONAL_ROLES=new Set(['outer','shoe','bag','scarf','hat','gloves','belt','tights']);
 const explicitlyNone=role=>lockedRoles.has(role)&&slotSelection[role]===NONE;
 // Indexed, on-demand constraint solver. It searches for one valid completion
 // of each visible garment choice, rather than materializing a Cartesian product.
@@ -240,7 +240,7 @@ function* buildUncached(){
  const excludeOpenToe=outsideBelow(60);
  const excludeShorts=outsideBelow(SHORTS_MIN_F);
  const excludeRainSensitive=rainDuringOuting();
- const by={top:[],bottom:[],dress:[],shoe:[],outer:[],bag:[],scarf:[],gloves:[],hat:[],belt:[]};
+ const by={top:[],bottom:[],dress:[],shoe:[],outer:[],bag:[],scarf:[],gloves:[],hat:[],belt:[],tights:[]};
  for(const garment of state.items){
   const role=roleOf(garment);
   if(!role||ST.activities.some(a=>!hasOccasion(garment,a.type)))continue;
@@ -261,13 +261,13 @@ function* buildUncached(){
 
   layered.push({...base,category:a.category==='Dresses'||b.category==='Dresses'?'Dresses':'Tops',item_code:code,name:base.name+' + '+outer.name,layerBase:base,layerOuter:outer});
  }
- const roles=['top','bottom','shoe','outer','scarf','gloves','hat','bag','belt'];
+ const roles=['top','bottom','shoe','outer','scarf','gloves','hat','bag','belt','tights'];
  const allOptions={
   top:[...by.top,...by.dress,...layered],bottom:[...by.bottom,null],
   shoe:noShoe?[null]:homeOnly?[...by.shoe,null]:by.shoe,
   outer:noOuter?[null]:[null,...by.outer],
   scarf:[null,...by.scarf],gloves:[null,...by.gloves],hat:[null,...by.hat],
-  bag:noBag?[null]:[null,...by.bag],belt:[null,...by.belt]
+  bag:noBag?[null]:[null,...by.bag],belt:[null,...by.belt],tights:[null,...by.tights]
  };
  // Shuffle each garment role independently before DFS. Otherwise the
  // representative completion for every item is biased to the first garments
@@ -279,7 +279,7 @@ function* buildUncached(){
  // Safe upper bounds for remaining warmth. These are optimistic: ignoring
  // compatibility can only make the bound larger, never discard a valid outfit.
  const maxWarmth=role=>Math.max(0,...allOptions[role].filter(Boolean).map(warmth));
- const roleWarmthMax={bottom:maxWarmth('bottom'),shoe:maxWarmth('shoe'),outer:maxWarmth('outer'),scarf:maxWarmth('scarf'),gloves:maxWarmth('gloves'),hat:maxWarmth('hat'),belt:0};
+ const roleWarmthMax={bottom:maxWarmth('bottom'),shoe:maxWarmth('shoe'),outer:maxWarmth('outer'),scarf:maxWarmth('scarf'),gloves:maxWarmth('gloves'),hat:maxWarmth('hat'),belt:0,tights:maxWarmth('tights')};
  const coldLimit=temperatures.length?70-Math.min(...temperatures):null;
  const permits=(items,candidate)=>!candidate||items.every(other=>!other||validatedPair(other,candidate));
  const variants=[];
@@ -302,7 +302,7 @@ function* buildUncached(){
    if(index>=1&&index<=2&&!homeOnly&&!noOuter&&coldLimit!==null){
     const current=[picked.top,picked.bottom].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0);
     const remaining=(index===1?roleWarmthMax.bottom:0)+roleWarmthMax.shoe+
-      roleWarmthMax.outer+roleWarmthMax.scarf+roleWarmthMax.gloves+roleWarmthMax.hat;
+      roleWarmthMax.outer+roleWarmthMax.scarf+roleWarmthMax.gloves+roleWarmthMax.hat+roleWarmthMax.tights;
     if(current+remaining<coldLimit-1e-8)return null;
    }
    // A top/bottom combination already too warm with the lightest eligible shoe
@@ -325,26 +325,20 @@ function* buildUncached(){
    // hence the bound is conservative and cannot reject a valid completion.
    if(index>=3&&index<=8&&!homeOnly&&!noOuter&&coldLimit!==null){
     const baseWarmth=[picked.top,picked.bottom,picked.shoe].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0);
-    const extraWarmth=['outer','scarf','gloves','hat'].reduce((sum,role)=>{
+    const extraWarmth=['outer','scarf','gloves','hat','tights'].reduce((sum,role)=>{
      const roleIndex=roles.indexOf(role);
      return sum+(roleIndex<index?(picked[role]?warmth(picked[role]):0):roleWarmthMax[role]);
     },0);
     if(baseWarmth+extraWarmth< coldLimit-1e-8)return null;
    }
-   // Temperature is independent of bag selection: don't enumerate bags for
-   // a base/layer/accessory combination that has already failed.
-   if(index===7&&!homeOnly&&!noOuter&&temperatures.length){
-    const baseWarmth=[picked.top,picked.bottom,picked.shoe].filter(Boolean).reduce((sum,g)=>sum+warmth(g),0);
-    const fullWarmth=baseWarmth+['outer','scarf','gloves','hat'].reduce((sum,role)=>sum+(picked[role]?warmth(picked[role]):0),0);
-    if(Math.abs(coldest+fullWarmth-75)>2.5)return null;
-    if(layeredComfortError(warmest,baseWarmth,picked.outer,picked.scarf,picked.gloves,picked.hat,picked.top?.layerOuter?warmth(picked.top.layerOuter):0)>2.5)return null;
-   }
+   // Tights are selected after optional outerwear. Do not reject a colder
+   // outfit before the insulating tights underlayer has been evaluated.
    if(index===roles.length){
     // Scarves, hats and gloves each require an actual jacket, including in locked looks.
     if(!picked.outer&&(picked.scarf||picked.hat||picked.gloves))return null;
     const base=[picked.top,picked.bottom,picked.shoe].filter(Boolean);
     if(!validBaseOutfit(base,homeOnly||noShoe))return null;
-    const baseWarmth=base.reduce((sum,g)=>sum+warmth(g),0);
+    const baseWarmth=base.reduce((sum,g)=>sum+warmth(g),0)+(picked.tights?warmth(picked.tights):0);
     const accessoryWarmth=['scarf','gloves','hat'].reduce((sum,role)=>sum+(picked[role]?warmth(picked[role]):0),0);
     const coat=picked.outer;
     // Check only extrema: all garments at minimum, any permitted subset at maximum.
@@ -359,6 +353,8 @@ function* buildUncached(){
    // Dresses are displayed in the top slot and do not have a separate bottom.
    if(role==='bottom')choices=picked.top&&roleOf(picked.top)==='dress'?[null]:allOptions.bottom.filter(Boolean);
    if(role==='belt'&&!picked.bottom)choices=[null];
+   // A single pair of tights may be worn underneath one dress or one bottom.
+   if(role==='tights'&&!picked.bottom&&roleOf(picked.top)!=='dress')choices=[null];
     if(role==='top'&&!choices.length)return null;
    // Avoid optional-item searches for a missing required shoe.
    if(role==='shoe'&&!choices.length)return null;
@@ -497,7 +493,7 @@ function outfitOrderKey(variant){
  for(let i=0;i<key.length;i++){hash=Math.imul(hash^key.charCodeAt(i),16777619)>>>0;}
  return hash;
 }
-const SLOT_ORDER=['top','outer','bottom','shoe','bag','scarf','gloves','hat','belt'];
+const SLOT_ORDER=['top','outer','bottom','tights','shoe','bag','scarf','gloves','hat','belt'];
 let slotSelection={};
 // An unlocked None is a browsable preview, not a validation override or an implicit lock.
 let previewNoneRoles=new Set();
@@ -611,7 +607,7 @@ function results(){
  const fullLow=Math.round(67-fullWarmth),fullHigh=Math.round(77-minimumWarmth);
  byid('st-count').textContent='Adjustable range: '+fullLow+'–'+fullHigh+'°F';
  byid('st-count').title='Full outfit with every layer at the cold end; mandatory base with optional layers removed at the warm end (67–77°F comfort envelope). Outfit eligibility may use a stricter comfort target.';
- const labels={top:'Top / dress',outer:'Jacket',bottom:'Pants / skirt',shoe:'Shoes',bag:'Bag',hat:'Hat',scarf:'Scarf',gloves:'Gloves',belt:'Belt'};
+ const labels={top:'Top / dress',outer:'Jacket',bottom:'Pants / skirt',shoe:'Shoes',bag:'Bag',hat:'Hat',scarf:'Scarf',gloves:'Gloves',belt:'Belt',tights:'Tights'};
  const noOuterWarning=(explicitlyNone('outer')||previewNoneRoles.has('outer'))&&!ST.activities.every(a=>a.type==='Home')&&scheduleHours().some(h=>{const temp=ST.weather?.[h]?.temp;return Number.isFinite(temp)&&layeredComfortError(temp,baseWarmth,null)>2.5;});
  const slots=SLOT_ORDER.map(role=>{
   const possible=[...new Map(optionsForSlot(g,role).map(v=>{const item=garmentFor(v,role);return [item?.item_code||NONE,item]})).values()].sort((a,b)=>compareRoleGarments(role,a,b));
