@@ -1,6 +1,7 @@
 /* Photo editor for Add Garment. Browser-side processing; no API keys. */
 (() => {
   let current = null, generation = 0;
+  let editorContext={mode:'add',itemCode:null};
   const $ = (id) => document.getElementById(id);
   const load = (url) => new Promise((resolve,reject) => {
     const existing=document.querySelector('script[data-photo-lib="'+url+'"]');
@@ -85,10 +86,20 @@
       }else status('Category could not be identified confidently. Select it manually.');
     }catch(e){status('Automatic category unavailable on this device. Select it manually.')}
   }
-  function completed(){
+  async function completed(){
     if(!current)return;
     if(current.tool==='crop'){applyCrop();return}
     renderPreview();
+    if(editorContext.mode==='existing'){
+      const save=$('photo-edit-done'),code=editorContext.itemCode;
+      save.disabled=true;status('Saving updated photo to your wardrobe…');
+      try {
+        if(typeof window.replaceWardrobeGarmentImage!=='function')throw Error('Cloud photo saving is not available.');
+        await window.replaceWardrobeGarmentImage(code,$('photo-edit-canvas').toDataURL('image/webp',0.85));
+        close();
+      }catch(error){status('Could not save photo: '+(error?.message||error));save.disabled=false;}
+      return;
+    }
     const c=$('photo-edit-canvas'),preview=$('photo-add-preview');
     window.wardrobePhotoEdited=c.toDataURL('image/webp',0.85);
     if(preview){preview.src=window.wardrobePhotoEdited;preview.hidden=false}
@@ -99,7 +110,7 @@
     $('photo-step-select').hidden=true;$('photo-step-review').hidden=false;
     suggestCategory(photo);
   }
-  function close(){const e=$('photo-edit-overlay');if(e)e.remove();current=null}
+  function close(){const e=$('photo-edit-overlay');if(e)e.remove();current=null;editorContext={mode:'add',itemCode:null}}
   function setTool(tool){
     if(!current)return;
     current.tool=tool;
@@ -165,8 +176,8 @@
     for(let y=0;y<s.mask.height;y+=2)for(let x=0;x<s.mask.width;x+=2)if(d[(y*s.mask.width+x)*4+3]>80){minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y)}
     if(minX>maxX){status('Nothing visible to crop');return}storeUndo();const pad=Math.round(Math.max(s.mask.width,s.mask.height)*.025);const x=Math.max(0,minX-pad),y=Math.max(0,minY-pad),w=Math.min(s.base.width-x,maxX-x+pad+2),h=Math.min(s.base.height-y,maxY-y+pad+2);
     for(const name of ['base','mask']){const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(s[name],x,y,w,h,0,0,w,h);s[name]=c}renderPreview()}
-  async function open(file,skipAI=false){
-    try{const img=await imageFromFile(file);const base=draw(img),mask=document.createElement('canvas');mask.width=base.width;mask.height=base.height;
+  async function open(file,skipAI=false,context={mode:'add',itemCode:null}){
+    try{const img=await imageFromFile(file);if($('photo-edit-overlay'))close();editorContext=context;const base=draw(img),mask=document.createElement('canvas');mask.width=base.width;mask.height=base.height;
       current={id:++generation,original:canvasCopy(base),base,mask,history:[],tool:'adjust',drawing:false,zoom:1};resetMask();
       document.body.insertAdjacentHTML('beforeend',editorHTML());
       $('photo-edit-cancel').onclick=close;$('photo-edit-done').onclick=completed;$('photo-remove-bg').onclick=removeBackground;$('photo-rotate').onclick=rotate;$('photo-crop').onclick=beginCrop;
@@ -203,6 +214,16 @@
       renderPreview();if(!skipAI)removeBackground();
     }catch(e){alert('Could not load photo: '+e.message)}
   }
+  // Both the existing-item view and Add Garment share this exact editing flow.
+  window.openWardrobePhotoEditorForItem=async function(code){
+    const item=state.items.find(x=>x.item_code===code);
+    if(!item?.image_path){alert('No photo is available for this garment.');return}
+    try {
+      const response=await fetch(item.image_path);
+      if(!response.ok)throw Error('Photo download failed ('+response.status+').');
+      await open(await response.blob(),true,{mode:'existing',itemCode:code});
+    }catch(error){alert('Could not open garment photo: '+(error?.message||error))}
+  };
   window.initWardrobePhotoAdd=function(){
     window.wardrobePhotoEdited=null;
     const input=$('photo-add-file');if(!input)return;
