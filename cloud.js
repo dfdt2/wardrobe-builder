@@ -41,6 +41,43 @@ function upgradeTopMetadata(items){
  }
  return changed;
 }
+// Replace only an existing garment's photo, preserving its ID, metadata and pair votes.
+// Upload first; commit the garment's new storage path only after both cloud writes succeed.
+window.replaceWardrobeGarmentImage=async function(itemCode,webpDataUrl){
+ if(!cloud.ready||!cloud.user)throw Error('Sign in and load cloud data before editing an existing photo.');
+ const garment=state.items.find(x=>x.item_code===itemCode);
+ if(!garment)throw Error('Garment no longer exists.');
+ if(typeof webpDataUrl!=='string'||!webpDataUrl.startsWith('data:image/webp;base64,'))throw Error('Invalid edited image.');
+ const sb=getClient(),{data:auth,error:authError}=await sb.auth.getUser();
+ if(authError)throw authError;
+ if(!auth?.user||auth.user.id!==cloud.user.id)throw Error('Your session has expired. Please sign in.');
+ const uid=auth.user.id;
+ // Confirm ownership and current cloud photo without touching the original garment.
+ const {data:existing,error:readError}=await sb.from('garments').select('image_path').eq('owner_id',uid).eq('item_code',itemCode).maybeSingle();
+ if(readError)throw readError;
+ if(!existing)throw Error('This garment is not in your cloud wardrobe.');
+ const response=await fetch(webpDataUrl),blob=await response.blob();
+ const path=uid+'/'+encodeURIComponent(itemCode.toLowerCase())+'-edited-'+Date.now()+'.webp';
+ const {error:uploadError}=await sb.storage.from('garment-images').upload(path,blob,{contentType:'image/webp',upsert:false});
+ if(uploadError)throw uploadError;
+ const {error:updateError}=await sb.from('garments').update({image_path:path}).eq('owner_id',uid).eq('item_code',itemCode);
+ if(updateError){
+  await sb.storage.from('garment-images').remove([path]).catch(()=>{});
+  throw updateError;
+ }
+ const oldPath=existing.image_path;
+ const {data:publicUrl}=sb.storage.from('garment-images').getPublicUrl(path);
+ garment._storage_path=path;
+ garment.image_path=publicUrl.publicUrl;
+ if(cloud.baselineGarments[itemCode])cloud.baselineGarments[itemCode].image_path=path;
+ persist();
+ // An old owned image can be removed only after successful replacement.
+ if(typeof oldPath==='string'&&oldPath.startsWith(uid+'/')&&oldPath!==path){
+  await sb.storage.from('garment-images').remove([oldPath]).catch(()=>{});
+ }
+ render();
+ return path;
+};
 async function uploadImages(sb,uid){let count=0;for(let x of state.items){if(!x.image_path?.startsWith('images/'))continue;let path=`${uid}/${x.item_code.toLowerCase()}.webp`;let blob=await fetch(x.image_path).then(r=>{if(!r.ok)throw Error('Cannot read '+x.image_path);return r.blob()});let {error}=await sb.storage.from('garment-images').upload(path,blob,{upsert:true,contentType:blob.type||'image/webp'});if(error)throw Error('Image upload for '+x.item_code+': '+error.message);x.image_path=path;count++}return count}
 async function uploadAll(){pruneIneligiblePairs();if(!confirm('Upload the local wardrobe and pair decisions to this Supabase account? Existing matching item codes and pairs will be updated.'))return;let sb=getClient(),user=(await sb.auth.getUser()).data.user;if(!user)throw Error('Sign in first.');cloud.user=user;message('Uploading images and garments…');let n=await uploadImages(sb,user.id);let rows=state.items.map(x=>({...safeGarment(x),owner_id:user.id}));let {error}=await sb.from('garments').upsert(rows,{onConflict:'owner_id,item_code'});if(error)throw error;let {data:items,error:readerr}=await sb.from('garments').select('id,item_code').eq('owner_id',user.id);if(readerr)throw readerr;let ids=Object.fromEntries(items.map(x=>[x.item_code,x.id]));let pairs=Object.entries(state.pairs).map(([key,v])=>{let [a,b]=key.split('::').map(k=>ids[k]);if(!a||!b)return null;let [garment_a_id,garment_b_id]=[a,b].sort();return {owner_id:user.id,garment_a_id,garment_b_id,decision:v}}).filter(Boolean);if(pairs.length){let {error}=await sb.from('compatibility').upsert(pairs,{onConflict:'owner_id,garment_a_id,garment_b_id'});if(error)throw error}cloud.connected=true;cloud.ready=true;cloud.baselinePairs={...state.pairs};cloud.baselineGarments=Object.fromEntries(state.items.map(x=>[x.item_code,safeGarment(x)]));localStorage.setItem('wardrobe-sync-user',user.id);localStorage.removeItem('wardrobe-sync-pending');reportCloudCount(pairs.length,'saved');message(`Saved ${rows.length} garments, ${pairs.length} pair decisions, and ${n} images in Supabase. Auto-sync enabled.`);}
 async function fetchAllRows(sb,table,columns,uid){let out=[];for(let from=0;;from+=500){const {data,error}=await sb.from(table).select(columns).eq('owner_id',uid).range(from,from+499);if(error)throw error;out.push(...(data||[]));if(!data||data.length<500)break;}return out;}
