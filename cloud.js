@@ -47,7 +47,7 @@ window.replaceWardrobeGarmentImage=async function(itemCode,webpDataUrl){
  if(!cloud.ready||!cloud.user)throw Error('Sign in and load cloud data before editing an existing photo.');
  const garment=state.items.find(x=>x.item_code===itemCode);
  if(!garment)throw Error('Garment no longer exists.');
- if(typeof webpDataUrl!=='string'||!webpDataUrl.startsWith('data:image/webp;base64,'))throw Error('Invalid edited image.');
+ if(typeof webpDataUrl!=='string'||!/^data:image\/(?:webp|png|jpeg);base64,/i.test(webpDataUrl))throw Error('Invalid edited image.');
  const sb=getClient(),{data:auth,error:authError}=await sb.auth.getUser();
  if(authError)throw authError;
  if(!auth?.user||auth.user.id!==cloud.user.id)throw Error('Your session has expired. Please sign in.');
@@ -57,8 +57,12 @@ window.replaceWardrobeGarmentImage=async function(itemCode,webpDataUrl){
  if(readError)throw readError;
  if(!existing)throw Error('This garment is not in your cloud wardrobe.');
  const response=await fetch(webpDataUrl),blob=await response.blob();
- const path=uid+'/'+encodeURIComponent(itemCode.toLowerCase())+'-edited-'+Date.now()+'.webp';
- const {error:uploadError}=await sb.storage.from('garment-images').upload(path,blob,{contentType:'image/webp',upsert:false});
+ const mime=blob.type.toLowerCase();
+ const extensions={'image/webp':'webp','image/png':'png','image/jpeg':'jpg'};
+ const extension=extensions[mime];
+ if(!extension||!blob.size)throw Error('The edited photo could not be exported. Please try again.');
+ const path=uid+'/'+encodeURIComponent(itemCode.toLowerCase())+'-edited-'+Date.now()+'.'+extension;
+ const {error:uploadError}=await sb.storage.from('garment-images').upload(path,blob,{contentType:mime,upsert:false});
  if(uploadError)throw uploadError;
  const {error:updateError}=await sb.from('garments').update({image_path:path}).eq('owner_id',uid).eq('item_code',itemCode);
  if(updateError){
