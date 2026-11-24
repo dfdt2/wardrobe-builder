@@ -152,7 +152,8 @@ function layeredComfortError(temp,base,coat=null,scarf=null,gloves=null,hat=null
   for(let mask=0;mask<(1<<extras.length);mask++){
    let added=0;
    for(let i=0;i<extras.length;i++)if(mask&(1<<i))added+=warmth(extras[i]);
-   best=Math.min(best,Math.abs(temp+coatBase+added-75));
+   // An open jacket retains 80% of its estimated warmth.
+   best=Math.min(best,Math.abs(temp+coatBase+added-75),Math.abs(temp+base+0.8*warmth(coat)+added-75));
   }
  }
  return best;
