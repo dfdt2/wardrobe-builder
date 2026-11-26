@@ -63,7 +63,7 @@
 #photo-edit-overlay #photo-remove-background{margin-right:auto;background:#fffffff0;color:#222;border:1px solid #dadde5;font-weight:600}
 #photo-edit-overlay #photo-edit-status{position:absolute;left:10px;right:10px;top:5px;margin:0;min-height:0;padding:0;text-align:center;font-size:11px;pointer-events:none;color:#62636a}
 #photo-edit-overlay #photo-edit-status:empty{display:none}
-#photo-edit-overlay #photo-adjust-panel,#photo-edit-overlay #photo-brush-panel{height:clamp(105px,15dvh,142px);flex:none;padding:10px 8px;display:flex;flex-direction:column;justify-content:center;gap:8px;overflow:hidden;box-sizing:border-box}
+#photo-edit-overlay #photo-adjust-panel,#photo-edit-overlay #photo-brush-panel{height:clamp(124px,15dvh,142px);flex:none;padding:10px 8px;display:flex;flex-direction:column;justify-content:center;gap:8px;overflow:hidden;box-sizing:border-box}
 #photo-edit-overlay .photo-adjust-choices{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px}
 #photo-edit-overlay .photo-adjust-choices button{border:0;background:none;display:flex;align-items:center;flex-direction:column;gap:7px;color:#222;font-size:clamp(11px,3.1vw,14px);padding:0;min-width:0;white-space:nowrap}
 #photo-edit-overlay .photo-adjust-choices button>span{width:clamp(38px,12vw,52px);aspect-ratio:1;display:grid;place-items:center;border-radius:50%;background:#f1f2f7}
@@ -90,7 +90,7 @@
 #photo-edit-overlay [data-crop-handle=ne]{right:-3px;top:-3px;border-width:3px 3px 0 0!important}
 #photo-edit-overlay [data-crop-handle=sw]{left:-3px;bottom:-3px;border-width:0 0 3px 3px!important}
 #photo-edit-overlay [data-crop-handle=se]{right:-3px;bottom:-3px;border-width:0 3px 3px 0!important}
-`;document.head.append(style);
+`;document.body.append(style);
   }
   function fitEditorStage(){
     if(!current)return;
