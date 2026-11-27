@@ -36,6 +36,9 @@ function* build(anchor){
  const variants=[],seen=new Set();let nodes=0;
  function* completion(forcedRole,forcedCode){
   const picked={},selected=[];
+  const forcedItem=forcedRole?by[forcedRole].find(g=>code(g)===forcedCode):null;
+  const requiredParts=[anchor,...parts(forcedItem)].filter((g,i,arr)=>arr.findIndex(p=>p.item_code===g.item_code)===i);
+  if(requiredParts.some((p,i)=>requiredParts.slice(i+1).some(q=>!approved(p,q))))return null;
   function* dfs(i,seasons,occasions){
    if(++nodes%128===0)yield null;
    if(i===searchOrder.length)return {...picked};
@@ -43,6 +46,7 @@ function* build(anchor){
    let choices=by[r];
    if(r==='bottom')choices= isDress(picked.top)?choices.filter(x=>!x):choices.filter(Boolean);
    if(r==='shoe'&&!occasions.has('home'))choices=choices.filter(Boolean);
+   if(r==='shoe'&&choices.includes(null)&&occasions.has('home'))choices=[...choices.filter(Boolean),null];
    if(weatherAccessories.includes(r)&&!picked.outer)choices=choices.filter(x=>!x);
    if(r==='belt')choices=choices.filter(x=>!x||(picked.bottom&&beltBottomAllowed(picked.bottom)&&pairTrainable(x,picked.bottom)&&approved(x,picked.bottom)));
    if(r==='tights')choices=choices.filter(x=>!x||picked.bottom||isDress(picked.top));
@@ -53,7 +57,7 @@ function* build(anchor){
    if(r==='bottom'&&forcedRole==='belt'&&forcedCode)choices=choices.filter(x=>x&&beltBottomAllowed(x));
    for(const g of choices){
     const ps=parts(g);
-    if(ps.some(p=>selected.some(q=>!approved(p,q))))continue;
+    if(ps.some(p=>selected.some(q=>!approved(p,q))||requiredParts.some(q=>p.item_code!==q.item_code&&!approved(p,q))))continue;
     let ss=seasons,oo=occasions;
     for(const p of ps){ss=intersect(ss,tags(p,'seasons'));if(!coverupRole(p))oo=intersect(oo,tags(p,'occasions'));}
     if(!ss.size||!oo.size)continue;
