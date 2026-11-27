@@ -10,7 +10,7 @@ const workSelected=()=>ST.activities.some(a=>a.type==='Work');
 const TYPES=WARDROBE_OCCASIONS;
 const SHORTS_MIN_F=60;
 const RAIN_MIST_MAX_MM_H=0.2;
-window.wardrobeStylistRules={openToeMin:60,shortsMin:SHORTS_MIN_F,scarfBelow:60,glovesBelow:50,hatBelow:40,target:75,tolerance:2.5,rainMistMaxMm:RAIN_MIST_MAX_MM_H};
+window.wardrobeStylistRules={openToeMin:60,shortsMin:SHORTS_MIN_F,scarfBelow:60,glovesBelow:50,hatBelow:40,target:75,tolerance:1,rainMistMaxMm:RAIN_MIST_MAX_MM_H};
 const ACTIVITY_DEFAULT_TIMES={
  Work:[8,17],Daily:[8,17],Date:[8,17],Business:[8,17],
  Home:[18,24],Party:[20,24],Dressy:[20,24],
@@ -359,7 +359,7 @@ function* buildUncached(){
     // Check only extrema: all garments at minimum, any permitted subset at maximum.
     const fullWarmth=baseWarmth+(coat?warmth(coat):0)+accessoryWarmth;
     const errors=temperatures.length?[Math.abs(coldest+fullWarmth-75),layeredComfortError(warmest,baseWarmth,coat,picked.scarf,picked.gloves,picked.hat,picked.top?.layerOuter?warmth(picked.top.layerOuter):0)]:[];
-    if(!homeOnly&&!noOuter&&errors.some(error=>error>2.5))return null;
+    if(!homeOnly&&!noOuter&&errors.some(error=>error>window.wardrobeStylistRules.tolerance))return null;
     const score=Math.max(0,100-Math.round((errors.length?errors.reduce((sum,e)=>sum+e,0)/errors.length:0)*4));
     return {garments:selected.filter(Boolean).slice(),score,layer:coat||null};
    }
@@ -581,7 +581,7 @@ function emptyReason(){
  const temperatures=hours.map(h=>ST.weather?.[h]?.temp).filter(Number.isFinite);
  const context=temperatures.length?' Scheduled temperatures: '+Math.round(Math.min(...temperatures))+'–'+Math.round(Math.max(...temperatures))+'°F.':' Weather data unavailable for the selected hours.';
  if(!combos)return 'No approved top + bottom + shoe combinations meet the selected activity tags. Check that cloud decisions have finished loading.'+context;
- return combos+' approved complete combinations meet your activity tags, but none pass the remaining temperature/layer requirements.'+context+' The ±2.5°F comfort constraint is still enforced.';
+ return combos+' approved complete combinations meet your activity tags, but none pass the remaining temperature/layer requirements.'+context+' The ±1°F comfort constraint is still enforced.';
 }
 function results(){
  if(!byid('st-outfit'))return;
@@ -638,7 +638,7 @@ function results(){
  byid('st-count').textContent='Adjustable range: '+fullLow+'–'+fullHigh+'°F';
  byid('st-count').title='Full outfit with every layer at the cold end; mandatory base with optional layers removed at the warm end (67–77°F comfort envelope). Outfit eligibility may use a stricter comfort target.';
  const labels={top:'Top / dress',outer:'Jacket',bottom:'Pants / skirt',shoe:'Shoes',bag:'Bag',hat:'Hat',scarf:'Scarf',gloves:'Gloves',belt:'Belt',tights:'Tights',jewelry:'Jewelry',hair:'Hair accessories'};
- const noOuterWarning=(explicitlyNone('outer')||previewNoneRoles.has('outer'))&&!ST.activities.every(a=>a.type==='Home')&&scheduleHours().some(h=>{const temp=ST.weather?.[h]?.temp;return Number.isFinite(temp)&&layeredComfortError(temp,baseWarmth,null)>2.5;});
+ const noOuterWarning=(explicitlyNone('outer')||previewNoneRoles.has('outer'))&&!ST.activities.every(a=>a.type==='Home')&&scheduleHours().some(h=>{const temp=ST.weather?.[h]?.temp;return Number.isFinite(temp)&&layeredComfortError(temp,baseWarmth,null)>window.wardrobeStylistRules.tolerance;});
  const slots=SLOT_ORDER.map(role=>{
   const possible=[...new Map(optionsForSlot(g,role).map(v=>{const item=garmentFor(v,role);return [item?.item_code||NONE,item]})).values()].sort((a,b)=>compareRoleGarments(role,a,b));
   if(OPTIONAL_ROLES.has(role)&&!possible.includes(null))possible.push(null);
