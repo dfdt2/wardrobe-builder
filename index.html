@@ -391,7 +391,7 @@ function coverupRole(g){
  if(tags.includes('cover-up top'))return 'top';
  return ({'OTHER-037':'dress','OTHER-038':'dress','OTHER-046':'dress','OTHER-048':'top','OTHER-054':'top'})[g.item_code]||null;
 }
-function coverupPairAllowed(a,b){const matches=(x,y)=>coverupRole(x)==='dress'&&y.category==='Shoes'||coverupRole(x)==='top'&&y.category==='Pants';return matches(a,b)||matches(b,a)}
+function coverupPairAllowed(a,b){const matches=(x,y)=>coverupRole(x)==='dress'&&y.category==='Shoes'||coverupRole(x)==='top'&&['Pants','Skirts'].includes(y.category);return matches(a,b)||matches(b,a)}
 function homePairAllowed(a,b){if(coverupPairAllowed(a,b))return true;return (!isHomeOnly(a)||hasHomeOccasion(b))&&(!isHomeOnly(b)||hasHomeOccasion(a))}
 // Pair compatibility requires at least one shared activity; categories still obey role rules.
 function sharedPairActivity(a,b){
@@ -447,7 +447,7 @@ function trainerCurrent(){
   if(!trainerRandomQueue.length)shuffleTrainer();
   return trainerPairByKey(trainerRandomQueue[0])||pending[0];
 }
-const TRAINER_RULE_LABELS=['Pants or skirts ↔ Tops','Tops ↔ Shoes','Pants or skirts ↔ Shoes','Pants or skirts ↔ Outerwear','Shorts, jeans or trousers ↔ Belts','Tights ↔ Pants','Tights ↔ Skirts','Tights ↔ Dresses','Base Layer → Outer Layer','Tops ↔ Outerwear','Dresses ↔ Outerwear','Dresses ↔ Shoes','Bags ↔ Tops','Bags ↔ Outerwear','Bags ↔ Dresses','Hats ↔ Outerwear','Gloves ↔ Outerwear','Hats ↔ Tops','Gloves ↔ Tops','Hair accessories ↔ Tops','Cover-up dresses ↔ Shoes (any occasion)','Cover-up tops ↔ Pants (any occasion)','Scarves ↔ Outerwear','Scarves ↔ Tops','Scarves ↔ Dresses','Hats ↔ Scarves','Gloves ↔ Scarves','Gloves ↔ Hats'];
+const TRAINER_RULE_LABELS=['Pants or skirts ↔ Tops','Tops ↔ Shoes','Pants or skirts ↔ Shoes','Pants or skirts ↔ Outerwear','Shorts, jeans or trousers ↔ Belts','Tights ↔ Pants','Tights ↔ Skirts','Tights ↔ Dresses','Base Layer → Outer Layer','Tops ↔ Outerwear','Dresses ↔ Outerwear','Dresses ↔ Shoes','Bags ↔ Tops','Bags ↔ Outerwear','Bags ↔ Dresses','Hats ↔ Outerwear','Gloves ↔ Outerwear','Hats ↔ Tops','Gloves ↔ Tops','Hair accessories ↔ Tops','Cover-up dresses ↔ Shoes (any occasion)','Cover-up tops ↔ Pants or skirts (any occasion)','Scarves ↔ Outerwear','Scarves ↔ Tops','Scarves ↔ Dresses','Hats ↔ Scarves','Gloves ↔ Scarves','Gloves ↔ Hats'];
 function trainerRuleSummary(){return '<div class="panel" style="margin-top:18px"><h3>Active compatibility rules</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:7px 15px;font-size:12px">'+TRAINER_RULE_LABELS.map(v=>'<div>• '+esc(v)+'</div>').join('')+'</div></div>'}
 function renderTrainer(m){
  setTitle('Compatibility');
