@@ -32,7 +32,17 @@ const iso=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1)
 const defaultDate=()=>{const d=new Date();if(d.getHours()>=21)d.setDate(d.getDate()+1);return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
 const dateLabel=v=>{const d=new Date();d.setDate(d.getDate()+1);const tomorrow=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');return v===iso()?'Today':v===tomorrow?'Tomorrow':new Date(v+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})};
 let currentOutfitCodes=[],currentTravelSlots=[],travelContext=null,travelSource='',normalSession=null;
-const sourceItems=()=>travelSource?state.items.filter(g=>window.travelCodes?.(travelSource).includes(g.item_code)):state.items;
+// Northern Hemisphere astronomical season boundaries (calendar-day approximation).
+function outfitSeason(date){
+ const day=Number(date.slice(5,7))*100+Number(date.slice(8,10));
+ return day>=1221||day<320?'Winter':day<621?'Spring':day<922?'Summer':'Fall';
+}
+function hasOutfitSeason(garment,season){return (Array.isArray(garment.seasons)?garment.seasons:String(garment.seasons||'').split(',')).some(v=>String(v).trim().toLowerCase()===season.toLowerCase());}
+const sourceItems=()=>{
+ const season=outfitSeason(ST.date);
+ const codes=travelSource?new Set(window.travelCodes?.(travelSource)||[]):null;
+ return state.items.filter(g=>(!codes||codes.has(g.item_code))&&hasOutfitSeason(g,season));
+};
 const excludedItemCodes=new Set();
 const excludedLayerPairs=new Set(); // Session-only, never persisted.
 let detailTapTimer=null,detailTapCode=null;
