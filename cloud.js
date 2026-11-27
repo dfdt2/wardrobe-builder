@@ -211,6 +211,16 @@ async function drain(){
 }
 
 // Clean-out rotation uses a dedicated owner-protected Supabase record.
+window.travelCloud=async function(action,payload){
+ const sb=getClient(),{data:{user},error:authError}=await sb.auth.getUser();
+ if(authError)throw authError;if(!user)throw Error('Sign in to save trips.');
+ let q=sb.from('trips');
+ if(action==='list')q=q.select('*').eq('owner_id',user.id).order('start_date');
+ else if(action==='save')q=q.upsert({...payload,owner_id:user.id,updated_at:new Date().toISOString()}).select().single();
+ else if(action==='delete')q=q.delete().eq('id',payload).eq('owner_id',user.id);
+ else throw Error('Invalid travel action');
+ const {data,error}=await q;if(error)throw error;return data;
+};
 window.loadCleanoutCloud=async function(){
  const sb=getClient(),{data:{user},error:authError}=await sb.auth.getUser();
  if(authError)throw authError;

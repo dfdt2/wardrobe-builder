@@ -31,7 +31,8 @@ const VIBES=['Casual','Minimal','Polished','Sporty','Romantic','Edgy'];
 const iso=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
 const defaultDate=()=>{const d=new Date();if(d.getHours()>=21)d.setDate(d.getDate()+1);return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
 const dateLabel=v=>{const d=new Date();d.setDate(d.getDate()+1);const tomorrow=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');return v===iso()?'Today':v===tomorrow?'Tomorrow':new Date(v+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})};
-let currentOutfitCodes=[];
+let currentOutfitCodes=[],currentTravelSlots=[],travelContext=null,travelSource='',normalSession=null;
+const sourceItems=()=>travelSource?state.items.filter(g=>window.travelCodes?.(travelSource).includes(g.item_code)):state.items;
 const excludedItemCodes=new Set();
 const excludedLayerPairs=new Set(); // Session-only, never persisted.
 let detailTapTimer=null,detailTapCode=null;
@@ -45,8 +46,8 @@ const getimage=x=>typeof image==='function'?image(x):x.image_path||'';
 const options=(selected,values)=>values.map(v=>`<option value="${E(v)}" ${String(v)===String(selected)?'selected':''}>${E(v)}</option>`).join('');
 function body(){
   return `<section class="stylist"><div class="layout"><div>
-  <section class="panel-s"><div class="line-s"><h2>Location & forecast</h2></div>
-  <div class="location-input"><input id="st-location" placeholder="City, state or country" value="${E(ST.location)}"><label class="date-wrap-s"><span id="st-date-label">${E(dateLabel(ST.date))}</span><input id="st-date" aria-label="Outfit date" type="date" value="${E(ST.date)}"></label></div>
+  <section class="panel-s"><div class="line-s"><h2>Location & forecast</h2></div><div style="margin:8px 0"><label>Wardrobe source <select id="st-travel-source" style="max-width:100%"><option value="">Full wardrobe</option>${(window.travelTrips?.()||[]).map(t=>`<option value="${E(t.id)}" ${travelSource===t.id?"selected":""}>${E(t.name)}</option>`).join("")}</select></label>${travelContext?' <button type="button" data-st="travel-back">Back to trip</button>':""}</div>
+  <div class="location-input"><input id="st-location" ${travelContext?"readonly":""} placeholder="City, state or country" value="${E(ST.location)}"><label class="date-wrap-s"><span id="st-date-label">${E(dateLabel(ST.date))}</span><input id="st-date" ${travelContext?"disabled":""} aria-label="Outfit date" type="date" value="${E(ST.date)}"></label></div>
   <div class="small" id="st-weather-msg" role="status" style="display:none"></div><div id="st-forecast" class="forecast-s"></div></section>
   <section class="panel-s"><h2>Schedule</h2><div id="st-activities"></div><button class="tiny" data-st="add">+ Add activity</button></section>
 
@@ -82,7 +83,7 @@ function forecast(){
    slot.innerHTML='<div class="small" style="padding:0 4px 4px;color:#777">Feels like (°F) · includes sun, wind & humidity</div><div class="weather-graph-s"><svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Hourly feels-like temperature from midnight to 11 PM, low '+Math.round(low.temp)+' degrees at '+time(low.h)+', high '+Math.round(high.temp)+' degrees at '+time(high.h)+'"><defs><linearGradient id="st-area-grad" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffe5a0" stop-opacity=".65"/><stop offset="1" stop-color="#9adce5" stop-opacity=".12"/></linearGradient><linearGradient id="st-line-grad" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#50bad1"/><stop offset=".55" stop-color="#e3bb40"/><stop offset="1" stop-color="#65c0bb"/></linearGradient></defs>'+guide+icons+'<path d="'+area+'" fill="url(#st-area-grad)"/><path d="'+line+'" stroke="url(#st-line-grad)" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" fill="none"/>'+scheduleMarkers+extrema+marks+'</svg></div>';
   }
  }
- const msg=byid('st-weather-msg');if(msg){msg.textContent=ST.weatherMessage;msg.style.display=ST.weather||!ST.weatherMessage?'none':'block';}
+ const msg=byid('st-weather-msg');if(msg){msg.textContent=ST.weatherMessage;msg.style.display=(!travelContext&&ST.weather)||!ST.weatherMessage?'none':'block';}
 }
 // Walking estimates for a 5'4"-5'5" adult at a normal pace.
 // Store shoe requirements in actual steps; mile/minute inputs are approximate.
@@ -242,7 +243,7 @@ function* buildUncached(){
  const excludeShorts=outsideBelow(SHORTS_MIN_F);
  const excludeRainSensitive=rainDuringOuting();
  const by={top:[],bottom:[],dress:[],shoe:[],outer:[],bag:[],scarf:[],gloves:[],hat:[],belt:[],tights:[]};
- for(const garment of state.items){
+ for(const garment of sourceItems()){
   const role=roleOf(garment);
   if(!role||ST.activities.some(a=>!hasOccasion(garment,a.type)))continue;
   if(excludeShorts&&garment.subcategory==='Shorts')continue;
@@ -528,7 +529,7 @@ function removeFromOutfits(code){if(!code||code===NONE)return;excludedItemCodes.
 function restoreExcluded(){excludedItemCodes.clear();excludedLayerPairs.clear();results();}
 function removeLayerPair(code){excludedLayerPairs.add(code);lockedRoles.delete('top');delete slotSelection.top;results();}
 function paintExclusions(){const slot=byid('st-excluded');if(slot){const items=excludedItems();slot.innerHTML=(items.length||excludedLayerPairs.size)?'<div class="excluded-title-s">Removed for this outfit ('+items.length+')</div><div class="excluded-items-s">'+[...items.map(g=>'<button type="button" class="excluded-chip-s" data-st="restore-one" data-item-code="'+E(g.item_code)+'" aria-label="Restore '+E(g.name)+'">'+E(g.name)+' <span aria-hidden="true">↩</span></button>'),...[...excludedLayerPairs].map(code=>'<button type="button" class="excluded-chip-s" data-st="restore-pair" data-pair-code="'+E(code)+'">'+E(code.replace('layer:','').replace('+',' + '))+' ↩</button>')].join('')+'</div><button type="button" class="random-outfit-s" data-st="restore-excluded" style="margin-top:10px">Restore removed items</button>':'';}}
-function conditionsKey(){return JSON.stringify({activities:ST.activities.map(a=>[a.type,a.start,a.end,walkingSteps(a)]),date:ST.date,location:ST.location,weather:ST.weather});}
+function conditionsKey(){return JSON.stringify({activities:ST.activities.map(a=>[a.type,a.start,a.end,walkingSteps(a)]),source:travelSource,codes:travelSource?window.travelCodes?.(travelSource):null,date:ST.date,location:ST.location,weather:ST.weather});}
 function garmentFor(v,role){return v.garments.find(x=>roleOf(x)===role||(role==='top'&&group(x.category)==='dress'))||null}
 function itemCode(v,role){return garmentFor(v,role)?.item_code||''}
 function selectedCode(v,role){return itemCode(v,role)||(OPTIONAL_ROLES.has(role)?NONE:'')}
@@ -565,9 +566,9 @@ function randomAnchor(){
 }
 function emptyReason(){
  const work=ST.activities.map(a=>a.type);
- const tops=state.items.filter(x=>group(x.category)==='top'&&work.every(t=>hasOccasion(x,t)));
- const bottoms=state.items.filter(x=>group(x.category)==='bottom'&&work.every(t=>hasOccasion(x,t)));
- const shoes=state.items.filter(x=>group(x.category)==='shoe'&&work.every(t=>hasOccasion(x,t)));
+ const tops=sourceItems().filter(x=>group(x.category)==='top'&&work.every(t=>hasOccasion(x,t)));
+ const bottoms=sourceItems().filter(x=>group(x.category)==='bottom'&&work.every(t=>hasOccasion(x,t)));
+ const shoes=sourceItems().filter(x=>group(x.category)==='shoe'&&work.every(t=>hasOccasion(x,t)));
  const basePairs=tops.flatMap(t=>bottoms.filter(b=>pair(t,b)).map(b=>[t,b]));
  const combos=basePairs.reduce((n,[t,b])=>n+shoes.filter(sh=>compatibleSet([t,b,sh])).length,0);
  const hours=scheduleHours();
@@ -613,7 +614,8 @@ function results(){
  for(const role of SLOT_ORDER)slotSelection[role]=previewNoneRoles.has(role)?NONE:selectedCode(chosen,role);
  const jacketRemoved=previewNoneRoles.has('outer')||explicitlyNone('outer');
  const displayedGarments=chosen.garments.filter(x=>!previewNoneRoles.has(roleOf(x))&&!(jacketRemoved&&['scarf','hat','gloves'].includes(roleOf(x))));
- currentOutfitCodes=[...new Set(displayedGarments.flatMap(x=>x.layerBase?[x.layerBase.item_code,x.layerOuter.item_code]:[x.item_code]).filter(Boolean))];
+ currentTravelSlots=displayedGarments.map(x=>({role:roleOf(x),codes:x.layerBase?[x.layerBase.item_code,x.layerOuter.item_code]:[x.item_code]}));
+  currentOutfitCodes=[...new Set(displayedGarments.flatMap(x=>x.layerBase?[x.layerBase.item_code,x.layerOuter.item_code]:[x.item_code]).filter(Boolean))];
  const baseGarments=displayedGarments.filter(g=>!['outer','bag','hat','scarf','gloves'].includes(roleOf(g)));
  const coat=displayedGarments.find(g=>group(g.category)==='outer');
  const baseWarmth=baseGarments.reduce((sum,g)=>sum+warmth(g),0);
@@ -642,7 +644,7 @@ function results(){
    (current?'<div class="garment-wrap-s">'+((current.flagged===true||current.layerBase?.flagged===true||current.layerOuter?.flagged===true)?'<span class="stylist-flag-badge" aria-label="Flagged garment" title="Flagged">!</span>':'')+'<button type="button" class="exclude-garment-s" data-st="'+(current.layerBase?'exclude-pair':'exclude-item')+'" data-item-code="'+E(current.item_code)+'" aria-label="Remove '+E(current.name)+' from outfit choices" title="Remove for this outfit">×</button><button type="button" class="garment-s" data-st="open-item" data-item-code="'+E(current.layerBase?current.layerBase.item_code:current.item_code)+'" aria-label="View '+E(current.name)+' details" style="-webkit-touch-callout:none;touch-action:pan-y">'+(current.layerBase?'<div class="layer-composite-s"><img draggable="false" class="layer-base-s" src="'+E(getimage(current.layerBase))+'" alt="'+E(current.layerBase.name)+'"><img draggable="false" class="layer-outer-s" src="'+E(getimage(current.layerOuter))+'" alt="'+E(current.layerOuter.name)+'"></div>':'<img draggable="false" style="-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;pointer-events:none" src="'+E(getimage(current))+'" alt="'+E(current.name)+'">')+'<div class="name">'+E(current.name)+'</div></button>'+'</div>':'<div class="slot-empty">No '+(role==='bag'?'bag':role==='outer'?'jacket':labels[role].toLowerCase())+(role==='outer'&&noOuterWarning?'<div style="font-size:11px;line-height:1.35;color:#a65b21;margin-top:5px;font-weight:500">Temperature requirements not met</div>':'')+'</div>')+
    (!canCycle?'':'<div class="slot-controls"><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="-1" '+(!canCycle?'disabled':'')+' aria-label="Previous '+labels[role]+'">‹</button><small>'+(Math.max(0,index)+1)+' / '+count+'</small><button type="button" data-st="cycle-slot" data-role="'+role+'" data-step="1" '+(!canCycle?'disabled':'')+' aria-label="Next '+labels[role]+'">›</button></div>')+'</div>';
  }).join('');
- byid('st-outfit').innerHTML='<div class="stylist-slots">'+slots+'</div><p class="slot-foot">'+'Compatible garment choices · Double-tap an item to lock / unlock, or use Lock</p>'+'<div style="margin:16px 4px 5px"><button type="button" data-st="record-wear" class="primary" style="width:100%;padding:13px 16px">I’m wearing this</button><p class="small" id="st-wear-confirmation" role="status" style="margin:8px 0 0;text-align:center"></p></div><div id="st-excluded" class="excluded-section-s"></div>';
+ byid('st-outfit').innerHTML='<div class="stylist-slots">'+slots+'</div><p class="slot-foot">'+'Compatible garment choices · Double-tap an item to lock / unlock, or use Lock</p>'+'<div style="margin:16px 4px 5px"><button type="button" data-st="record-wear" class="primary" style="width:100%;padding:13px 16px">'+(travelContext?'Add to date':'I’m wearing this')+'</button><p class="small" id="st-wear-confirmation" role="status" style="margin:8px 0 0;text-align:center"></p></div><div id="st-excluded" class="excluded-section-s"></div>';
  paintExclusions();
  const holder=byid('st-outfit');
  holder.querySelectorAll('[data-swipe-role]').forEach(el=>{
@@ -677,7 +679,7 @@ function cycleSlot(role,step){
  results();
 }
 
-async function getWeather(){if(ST.lat==null||ST.lon==null)return;const key=`${ST.lat},${ST.lon},${ST.date}`;if(ST.weatherKey===key&&ST.weather)return;ST.weather=null;ST.weatherMessage='Loading forecast…';forecast();try{const url=`https://api.open-meteo.com/v1/forecast?latitude=${ST.lat}&longitude=${ST.lon}&hourly=apparent_temperature,precipitation_probability,precipitation,snowfall,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=16`;const res=await fetch(url);if(!res.ok)throw Error('Forecast service unavailable');const d=await res.json();const hours=Array.from({length:24},(_,h)=>{const idx=d.hourly.time.indexOf(`${ST.date}T${String(h).padStart(2,'0')}:00`);return idx<0?null:{temp:d.hourly.apparent_temperature[idx],rain:d.hourly.precipitation_probability[idx]??0,precipMm:d.hourly.precipitation?.[idx]??null,snow:d.hourly.snowfall[idx]??0,code:d.hourly.weather_code[idx]}});if(hours.every(x=>!x))throw Error('Forecast unavailable for this date (typically limited to the next 16 days)');ST.weather=hours;ST.weatherKey=key;ST.weatherMessage='';}catch(e){ST.weatherMessage=e.message;ST.weatherKey='';}forecast();results();}
+async function getWeather(){if(ST.lat==null||ST.lon==null)return;const request=locationRequestId, key=`${ST.lat},${ST.lon},${ST.date}`;if(travelContext){try{const w=await window.travelWeather(travelContext.place,travelContext.date);if(request!==locationRequestId||!travelContext)return;ST.weather=w.hours;ST.weatherKey=key;ST.weatherMessage=w.label;forecast();results();}catch(e){if(request===locationRequestId&&travelContext){ST.weather=null;ST.weatherMessage=e.message;forecast();results()}}return;}if(ST.weatherKey===key&&ST.weather)return;ST.weather=null;ST.weatherMessage='Loading forecast…';forecast();try{const url=`https://api.open-meteo.com/v1/forecast?latitude=${ST.lat}&longitude=${ST.lon}&hourly=apparent_temperature,precipitation_probability,precipitation,snowfall,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=16`;const res=await fetch(url);if(!res.ok)throw Error('Forecast service unavailable');const d=await res.json();if(request!==locationRequestId)return;const hours=Array.from({length:24},(_,h)=>{const idx=d.hourly.time.indexOf(`${ST.date}T${String(h).padStart(2,'0')}:00`);return idx<0?null:{temp:d.hourly.apparent_temperature[idx],rain:d.hourly.precipitation_probability[idx]??0,precipMm:d.hourly.precipitation?.[idx]??null,snow:d.hourly.snowfall[idx]??0,code:d.hourly.weather_code[idx]}});if(hours.every(x=>!x))throw Error('Forecast unavailable for this date (typically limited to the next 16 days)');ST.weather=hours;ST.weatherKey=key;ST.weatherMessage='';}catch(e){if(request!==locationRequestId)return;ST.weatherMessage=e.message;ST.weatherKey='';}forecast();results();}
 async function searchLocation(){
  const name=byid('st-location')?.value.trim();if(!name)return;
  const request=++locationRequestId;locationMode='manual';
@@ -732,20 +734,33 @@ function detect(){
  },()=>{if(request===locationRequestId){ST.weatherMessage='Location access denied. Search for a city instead.';forecast()}},{timeout:12000,maximumAge:600000});
 }
 function syncActivityLocation(){
+ if(travelContext)return;
  if(workSelected()){
   if(locationMode!=='work'||ST.location!==workAddress())useWorkLocation();
  }else if(locationMode==='work'||!ST.geolocationTried){
   ST.geolocationTried=true;detect();
  }
 }
-window.addEventListener('wardrobe:work-address-changed',()=>{if(workSelected())useWorkLocation()});
+window.addEventListener('wardrobe:work-address-changed',()=>{if(!travelContext&&workSelected())useWorkLocation()});
 // Re-entering Stylist should reuse completed calculations and any in-progress
 // job. Results are invalidated only when their actual inputs change.
 window.addEventListener('wardrobe:changed',invalidateOutfitPool);
-window.renderStylist=function(m){if(!ST.dateManual)ST.date=defaultDate();setTitle("Stylist");m.innerHTML=body();schedule();forecast();results();syncActivityLocation()};
+window.beginTravelStylist=function(ctx){
+ if(!travelContext)normalSession={st:structuredClone(ST),locationMode,source:travelSource};
+ ++locationRequestId;clearTimeout(locationTimer);travelContext=ctx;travelSource='';
+ Object.assign(ST,{date:ctx.date,dateManual:true,location:ctx.place.name,lat:ctx.place.lat,lon:ctx.place.lon,weather:null,weatherKey:'',weatherMessage:'Loading weather…',activities:[defaultActivity('Daily')],cluster:0,variant:0});
+ clearAllLocks();excludedItemCodes.clear();excludedLayerPairs.clear();invalidateOutfitPool();nav('stylist');getWeather();
+};
+window.leaveTravelStylist=function(){
+ if(!travelContext)return;
+ ++locationRequestId;travelContext=null;
+ if(normalSession){Object.assign(ST,normalSession.st);locationMode=normalSession.locationMode;travelSource=normalSession.source;normalSession=null;}
+ clearAllLocks();excludedItemCodes.clear();excludedLayerPairs.clear();invalidateOutfitPool();
+};
+window.renderStylist=function(m){if(!ST.dateManual)ST.date=defaultDate();setTitle("Stylist");m.innerHTML=body();schedule();forecast();results();syncActivityLocation();window.ensureTravelTrips?.().then(()=>{const el=byid('st-travel-source');if(!el)return;el.innerHTML='<option value="">Full wardrobe</option>'+(window.travelTrips?.()||[]).map(t=>'<option value="'+E(t.id)+'">'+E(t.name)+'</option>').join('');el.value=travelSource;}).catch(()=>{})};
 document.addEventListener('click',e=>{if(suppressAnchorClick){suppressAnchorClick=false;e.preventDefault();e.stopImmediatePropagation()}},true);
-document.addEventListener('click',e=>{if(state.page!=='stylist')return;const b=e.target.closest('[data-st]');if(!b)return;const act=b.dataset.st;if(act==='open-item'){const code=b.dataset.itemCode,role=b.closest('[data-swipe-role]')?.dataset.swipeRole;if(detailTapTimer&&detailTapCode===code){clearTimeout(detailTapTimer);detailTapTimer=null;detailTapCode=null;if(role)toggleLock(role);}else{if(detailTapTimer)clearTimeout(detailTapTimer);detailTapCode=code;detailTapTimer=setTimeout(()=>{detailTapTimer=null;detailTapCode=null;openItemDetail(code,'stylist','matches')},320);}return}if(act==='toggle-lock'){toggleLock(b.dataset.role);return}if(act==='exclude-item'){removeFromOutfits(b.dataset.itemCode);return}if(act==='exclude-pair'){removeLayerPair(b.dataset.itemCode);return}if(act==='restore-pair'){excludedLayerPairs.delete(b.dataset.pairCode);results();return}if(act==='restore-excluded'){restoreExcluded();return}if(act==='restore-one'){excludedItemCodes.delete(b.dataset.itemCode);results();return}if(act==='record-wear'){const list=currentOutfitCodes.map(code=>state.items.find(x=>x.item_code===code)).filter(Boolean);if(!list.length)return;for(const x of list)x.wear_count=Math.max(0,Number(x.wear_count)||0)+1;persist();const message=byid('st-wear-confirmation');if(message)message.textContent='Recorded +1 wear for '+list.length+' items.';return}if(act==='random-anchor'){randomAnchor();return}if(act==='clear-locks'){clearAllLocks();results();return} if(act==='cycle-slot'){cycleSlot(b.dataset.role,Number(b.dataset.step));return}if(act==='set-anchor'){toggleLock(b.dataset.role);return}if(act==='detect')detect();if(act==='search')searchLocation();if(act==='add'){ST.activities.push(defaultActivity('Daily'));schedule();syncActivityLocation();forecast();results()}if(act==='remove'){if(ST.activities.length>1){ST.activities.splice(+b.dataset.index,1);schedule();syncActivityLocation();forecast();results()}}if(act==='vibe'){ST.vibe=b.dataset.vibe;ST.cluster=0;ST.variant=0;schedule();results()}if(act==='family'){ST.cluster=+b.dataset.index;ST.variant=0;slotSelection={};lastClusterKey='';results()}if(act==='previous'||act==='next'){const g=build()?.[ST.cluster];if(g)ST.variant=(ST.variant+(act==='next'?1:-1)+g.variants.length)%g.variants.length;results()}});
-document.addEventListener('change',e=>{if(state.page!=='stylist')return;const el=e.target;if(el.id==='st-date'){ST.date=el.value||defaultDate();ST.dateManual=true;ST.activities.forEach(a=>{if(!a.timeCustomized){const [start,end]=ACTIVITY_DEFAULT_TIMES[a.type]||[8,17];a.start=start;a.end=end;}});schedule();const label=byid('st-date-label');if(label)label.textContent=dateLabel(ST.date);ST.weatherKey='';getWeather()}if(el.dataset.stWalkUnit!=null){
+document.addEventListener('click',e=>{if(state.page!=='stylist')return;const b=e.target.closest('[data-st]');if(!b)return;const act=b.dataset.st;if(act==='open-item'){const code=b.dataset.itemCode,role=b.closest('[data-swipe-role]')?.dataset.swipeRole;if(detailTapTimer&&detailTapCode===code){clearTimeout(detailTapTimer);detailTapTimer=null;detailTapCode=null;if(role)toggleLock(role);}else{if(detailTapTimer)clearTimeout(detailTapTimer);detailTapCode=code;detailTapTimer=setTimeout(()=>{detailTapTimer=null;detailTapCode=null;openItemDetail(code,'stylist','matches')},320);}return}if(act==='toggle-lock'){toggleLock(b.dataset.role);return}if(act==='exclude-item'){removeFromOutfits(b.dataset.itemCode);return}if(act==='exclude-pair'){removeLayerPair(b.dataset.itemCode);return}if(act==='restore-pair'){excludedLayerPairs.delete(b.dataset.pairCode);results();return}if(act==='restore-excluded'){restoreExcluded();return}if(act==='restore-one'){excludedItemCodes.delete(b.dataset.itemCode);results();return}if(act==='travel-back'){nav('travel');return}if(act==='record-wear'){if(travelContext){window.saveTravelOutfit(travelContext,structuredClone(ST.activities),structuredClone(currentTravelSlots));return}const list=currentOutfitCodes.map(code=>state.items.find(x=>x.item_code===code)).filter(Boolean);if(!list.length)return;for(const x of list)x.wear_count=Math.max(0,Number(x.wear_count)||0)+1;persist();const message=byid('st-wear-confirmation');if(message)message.textContent='Recorded +1 wear for '+list.length+' items.';return}if(act==='random-anchor'){randomAnchor();return}if(act==='clear-locks'){clearAllLocks();results();return} if(act==='cycle-slot'){cycleSlot(b.dataset.role,Number(b.dataset.step));return}if(act==='set-anchor'){toggleLock(b.dataset.role);return}if(act==='detect')detect();if(act==='search')searchLocation();if(act==='add'){ST.activities.push(defaultActivity('Daily'));schedule();syncActivityLocation();forecast();results()}if(act==='remove'){if(ST.activities.length>1){ST.activities.splice(+b.dataset.index,1);schedule();syncActivityLocation();forecast();results()}}if(act==='vibe'){ST.vibe=b.dataset.vibe;ST.cluster=0;ST.variant=0;schedule();results()}if(act==='family'){ST.cluster=+b.dataset.index;ST.variant=0;slotSelection={};lastClusterKey='';results()}if(act==='previous'||act==='next'){const g=build()?.[ST.cluster];if(g)ST.variant=(ST.variant+(act==='next'?1:-1)+g.variants.length)%g.variants.length;results()}});
+document.addEventListener('change',e=>{if(state.page!=='stylist')return;const el=e.target;if(el.id==='st-travel-source'){travelSource=el.value;clearAllLocks();excludedItemCodes.clear();excludedLayerPairs.clear();invalidateOutfitPool();results();return}if(el.id==='st-date'){ST.date=el.value||defaultDate();ST.dateManual=true;ST.activities.forEach(a=>{if(!a.timeCustomized){const [start,end]=ACTIVITY_DEFAULT_TIMES[a.type]||[8,17];a.start=start;a.end=end;}});schedule();const label=byid('st-date-label');if(label)label.textContent=dateLabel(ST.date);ST.weatherKey='';getWeather()}if(el.dataset.stWalkUnit!=null){
  const i=+el.dataset.stWalkUnit,a=ST.activities[i];if(!a)return;
  const steps=walkingSteps(a);a.walkingUnit=el.value;
  const input=el.closest('.walking-steps-s')?.querySelector('[data-st-walking]');
