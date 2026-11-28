@@ -32,6 +32,7 @@ const iso=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1)
 const defaultDate=()=>{const d=new Date();if(d.getHours()>=21)d.setDate(d.getDate()+1);return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
 const dateLabel=v=>{const d=new Date();d.setDate(d.getDate()+1);const tomorrow=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');return v===iso()?'Today':v===tomorrow?'Tomorrow':new Date(v+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})};
 let currentOutfitCodes=[],currentTravelSlots=[],travelContext=null,travelSource='',normalSession=null;
+function comfortTolerance(){return travelSource?2:window.wardrobeStylistRules.tolerance;}
 // Northern Hemisphere astronomical season boundaries (calendar-day approximation).
 function outfitSeason(date){
  const day=Number(date.slice(5,7))*100+Number(date.slice(8,10));
@@ -369,7 +370,7 @@ function* buildUncached(){
     // Check only extrema: all garments at minimum, any permitted subset at maximum.
     const fullWarmth=baseWarmth+(coat?warmth(coat):0)+accessoryWarmth;
     const errors=temperatures.length?[Math.abs(coldest+fullWarmth-75),layeredComfortError(warmest,baseWarmth,coat,picked.scarf,picked.gloves,picked.hat,picked.top?.layerOuter?warmth(picked.top.layerOuter):0)]:[];
-    if(!homeOnly&&!noOuter&&errors.some(error=>error>window.wardrobeStylistRules.tolerance))return null;
+    if(!homeOnly&&!noOuter&&errors.some(error=>error>comfortTolerance()))return null;
     const score=Math.max(0,100-Math.round((errors.length?errors.reduce((sum,e)=>sum+e,0)/errors.length:0)*4));
     return {garments:selected.filter(Boolean).slice(),score,layer:coat||null};
    }
@@ -591,7 +592,7 @@ function emptyReason(){
  const temperatures=hours.map(h=>ST.weather?.[h]?.temp).filter(Number.isFinite);
  const context=temperatures.length?' Scheduled temperatures: '+Math.round(Math.min(...temperatures))+'–'+Math.round(Math.max(...temperatures))+'°F.':' Weather data unavailable for the selected hours.';
  if(!combos)return 'No approved top + bottom + shoe combinations meet the selected activity tags. Check that cloud decisions have finished loading.'+context;
- return combos+' approved complete combinations meet your activity tags, but none pass the remaining temperature/layer requirements.'+context+' The ±1°F comfort constraint is still enforced.';
+ return combos+' approved complete combinations meet your activity tags, but none pass the remaining temperature/layer requirements.'+context+' The ±'+comfortTolerance()+'°F comfort constraint is still enforced.';
 }
 function results(){
  if(!byid('st-outfit'))return;
@@ -648,7 +649,7 @@ function results(){
  byid('st-count').textContent='Adjustable range: '+fullLow+'–'+fullHigh+'°F';
  byid('st-count').title='Full outfit with every layer at the cold end; mandatory base with optional layers removed at the warm end (67–77°F comfort envelope). Outfit eligibility may use a stricter comfort target.';
  const labels={top:'Top / dress',outer:'Jacket',bottom:'Pants / skirt',shoe:'Shoes',bag:'Bag',hat:'Hat',scarf:'Scarf',gloves:'Gloves',belt:'Belt',tights:'Tights',jewelry:'Jewelry',hair:'Hair accessories'};
- const noOuterWarning=(explicitlyNone('outer')||previewNoneRoles.has('outer'))&&!ST.activities.every(a=>a.type==='Home')&&scheduleHours().some(h=>{const temp=ST.weather?.[h]?.temp;return Number.isFinite(temp)&&layeredComfortError(temp,baseWarmth,null)>window.wardrobeStylistRules.tolerance;});
+ const noOuterWarning=(explicitlyNone('outer')||previewNoneRoles.has('outer'))&&!ST.activities.every(a=>a.type==='Home')&&scheduleHours().some(h=>{const temp=ST.weather?.[h]?.temp;return Number.isFinite(temp)&&layeredComfortError(temp,baseWarmth,null)>comfortTolerance();});
  const slots=SLOT_ORDER.map(role=>{
   const possible=[...new Map(optionsForSlot(g,role).map(v=>{const item=garmentFor(v,role);return [item?.item_code||NONE,item]})).values()].sort((a,b)=>compareRoleGarments(role,a,b));
   if(OPTIONAL_ROLES.has(role)&&!possible.includes(null))possible.push(null);
