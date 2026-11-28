@@ -30,6 +30,7 @@ window.travelWeather=async(place,date)=>{
  })();cache.set(key,{at:Date.now(),promise});try{return await promise}catch(e){cache.delete(key);throw e}
 };
 async function save(t){const saved=await window.travelCloud('save',t);const i=trips.findIndex(x=>x.id===saved.id);if(i<0)trips.push(saved);else trips[i]=saved;return saved}
+window.bulkAddToPacking=async(id,selected)=>{await window.ensureTravelTrips();const trip=find(id);if(!trip)throw Error('Packing trip not found.');const next=structuredClone(trip);next.plan.manual=[...new Set([...(next.plan.manual||[]),...selected])];return save(next)};
 async function mutate(fn){if(busy)return;busy=true;try{await fn()}catch(e){alert(e.message||String(e))}finally{busy=false;if(state.page==='travel')render()}}
 let draft=null,calendarState=null,coverRequest=0;
 const dateKey=d=>[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
