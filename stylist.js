@@ -41,7 +41,7 @@ function hasOutfitSeason(garment,season){return (Array.isArray(garment.seasons)?
 const sourceItems=()=>{
  const season=outfitSeason(ST.date);
  const codes=travelSource?new Set(window.travelCodes?.(travelSource)||[]):null;
- return state.items.filter(g=>(!codes||codes.has(g.item_code))&&hasOutfitSeason(g,season));
+ return state.items.filter(g=>!window.isWardrobeArchived?.(g)&&(!codes||codes.has(g.item_code))&&hasOutfitSeason(g,season));
 };
 const excludedItemCodes=new Set();
 const excludedLayerPairs=new Set(); // Session-only, never persisted.
